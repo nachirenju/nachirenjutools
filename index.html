@@ -1145,7 +1145,10 @@ document.getElementById("analyzePlayerBtn").addEventListener("click", function()
 
       const div = document.createElement("div");
 
-     // 累計勝敗テーブル（文字色追加 + 比率表示）
+// 累計勝敗テーブル（文字色追加 + 比率表示 + 勝ち点表示）
+const totalPoints = totalWin + totalDraw*0.5;
+const pointsPct   = ((totalPoints / totalGames)*100).toFixed(1);
+
 const summaryTable = document.createElement("table");
 summaryTable.border = "1";
 summaryTable.style.borderCollapse = "collapse";
@@ -1166,12 +1169,14 @@ summaryTable.innerHTML = `
         <span style="color:green">勝ち: ${totalWin} (${winPct}%)</span> /
         <span style="color:red">負け: ${totalLose} (${losePct}%)</span> /
         <span style="color:blue">引き分け: ${totalDraw} (${drawPct}%)</span>
-        （合計 ${totalGames}局）
+        （合計 ${totalGames}局）<br>
+        <span style="color:purple">勝ち点: ${totalPoints} (${pointsPct}%)</span>
       </td>
     </tr>
   </tbody>
 `;
 div.appendChild(summaryTable);
+
 
 
       // 統計情報
