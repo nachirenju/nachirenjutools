@@ -1,0 +1,1447 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<title>連珠トーナメント集計・スワップ解析</title>
+<style>
+  body { font-family: sans-serif; padding: 1em; }
+  input, button { padding: 5px; margin: 5px; }
+  table { border-collapse: collapse; margin-top: 10px; width: 900px; }
+  th, td { border: 1px solid #ccc; padding: 5px; text-align: center; }
+</style>
+</head>
+<body>
+
+<h1>連珠トーナメント集計・スワップ解析</h1>
+
+<input type="file" id="fileInput" accept=".rif,.xml"><br>
+
+<!-- 使い方リンク -->
+<a href="#" id="showHelp">使い方</a>
+
+<!-- モーダル用のコンテナ -->
+<div id="helpModal" style="display:none; position:fixed; top:10%; left:10%; width:80%; max-height:80%; overflow:auto; background:white; border:2px solid black; padding:1em; z-index:1000;">
+  <h2>使い方</h2>
+  <p>連珠のトーナメント集計ツールです。<a href="https://x.com/nachirenju">@nachirenju</a>が興味本位で知識0のところから製作した経緯上、ちゃんと動くか未知数です。<br>
+私自身の使用に問題はありませんでしたが、こちらを使用したことでいかなる問題が発生しても責任は負いかねます。<br>
+何かあればXアカウントのほうにご連絡ください。</p>
+
+  <h3>〇基本的な使い方</h3>
+  <ol>
+    <li>「ファイルを選択」を押しデータベースを読み込ませます。.rifおよび.xmlが読み込み可能（データベースは<a href="https://www.renju.net/">RIF公式</a>よりダウンロード可能）<br>
+        ※RIF公式のデータベースでしか動作検証をしていません。</li>
+    <li>キーワード検索で候補を探すか、大会IDを右側の欄に直接入力します。カンマ区切りで複数入力可<br>
+    <li>入力後、「大会集計」ボタンを押すと基本データが出ます。</li>
+<li>現状、Soosrv-8,Taraguchi-10,Classic,Yamaguchi以外のトーナメントには未対応です。</li>
+(連珠の対局を検索する分にはほぼこの4つの開局規定さえ押さえれば困らないので当面更新予定なし)
+  </ol>
+
+  <h3>〇データについて</h3>
+  <ul>
+    <li>N手目着手者勝利数のみ、決着がついた対局のみから集計してます（引き分け除外）</li>
+  </ul>
+
+  <h3>〇プレイヤー別集計</h3>
+  <ul>
+    <li>現状RIF側のname,surname,nativenameのいずれかを入力すると検索できます。</li>
+    <li>カンマ区切りで複数人の入力に対応しています。</li>
+    <li>複数人入力時、該当プレイヤー同士の対局のみが検索されます。<br>
+        (例:A,Bと入力したとき、A vs Bの対局のみが抽出。A,B,CのときはAB AC BCの組み合わせが抽出）</li>
+  </ul>
+
+  <h3>〇スワップ履歴検索</h3>
+  <ul>
+    <li>該当プレイヤーのスワップ履歴および何手目を着手したかを一覧で表示します。</li>
+    <li>現状Taraguchi-10の10題表示未対応</li>
+  </ul>
+
+  <button id="closeHelp">閉じる</button>
+</div>
+
+
+<input type="text" id="keyword" placeholder="キーワードで検索">
+
+<label>
+  <input type="checkbox" id="matchPartial" checked>
+  部分一致
+</label>
+<label>
+  <input type="checkbox" id="matchStart">
+  先頭一致
+</label>
+<label><input type="radio" name="matchType" value="regex"> 正規表現</label>
+
+<div id="suggestions"></div>
+
+<label><input type="checkbox" class="ruleCheckbox" value="24" checked> Soosrv-8</label>
+<label><input type="checkbox" class="ruleCheckbox" value="25" checked> Taraguchi-10</label>
+<label><input type="checkbox" class="ruleCheckbox" value="1"  checked> Classic</label>
+<label><input type="checkbox" class="ruleCheckbox" value="5"  checked> Yamaguchi</label>
+
+
+
+
+
+
+
+
+<input type="text" id="tournamentId" placeholder="大会IDを入力">
+<button id="analyzeBtn">大会集計</button>
+
+<h2>大会勝敗統計</h2>
+<div id="stats"></div>
+
+<h2>最多スワップパターン対局例</h2>
+<div id="mostSwapExample"></div>
+
+<h2>珠型ランキング（上位10件）</h2>
+<table id="openingTable">
+  <thead><tr><th>順位</th><th>珠型名</th><th>件数</th></tr></thead>
+  <tbody></tbody>
+</table>
+
+<h2>5手目までの頻出棋譜ランキング（上位10）</h2>
+<div id="top5MovesContainer"></div>
+
+
+<h2>珠型ごとの勝率（全珠型）</h2>
+<table id="openingWinRateTable">
+  <thead><tr><th>珠型名</th><th>黒勝率</th><th>白勝率</th><th>引き分け率</th><th>対局数</th></tr></thead>
+  <tbody></tbody>
+</table>
+
+<h2>プレイヤー別集計</h2>
+<input type="text" id="playerInput" placeholder="プレイヤー名を入力">
+<button id="analyzePlayerBtn">集計</button>
+<div id="playerStats"></div>
+
+<h2>検索したプレイヤーの5手目頻出棋譜top10</h2>
+<div id="tournamentplayerTop5MovesContainer"></div>
+
+
+<h2>スワップ履歴検索</h2>
+<input type="text" id="swapPlayerInput" placeholder="プレイヤー名を入力">
+<button id="searchSwapBtn">検索</button>
+<div id="swapResult"></div>
+</div>
+
+
+
+<script>
+let allGames = [];
+let allTournaments = [];  // 大会一覧（検索用）
+let allPlayers = {};
+let playerIndex = {};
+let tournamentMap = {}; // ←追加
+
+
+// opening固定定義
+const openingMap = {
+  "1":"長星","2":"峡月","3":"恒星","4":"水月","5":"流星","6":"雲月",
+  "7":"浦月","8":"嵐月","9":"銀月","10":"明星","11":"斜月","12":"名月",
+  "13":"彗星","14":"寒星","15":"渓月","16":"疎星","17":"花月","18":"残月",
+  "19":"雨月","20":"金星","21":"松月","22":"丘月","23":"新月","24":"瑞星",
+  "25":"山月","26":"遊星"
+};
+
+
+  window.addEventListener("DOMContentLoaded", () => {
+    // ここに処理を書く
+    document.getElementById("tournamentTabBtn").addEventListener("click", () => openTab('tournamentTab'));
+    document.getElementById("playerTabBtn").addEventListener("click", () => openTab('playerTab'));
+
+    document.getElementById("searchPlayerBtn").addEventListener("click", () => {
+        // プレイヤー検索処理
+    });
+}); // ← ここが "}" と ")" の組み合わせ
+
+
+
+// ファイル読み込み
+document.getElementById("fileInput").addEventListener("change", function(e){
+  const file = e.target.files[0];
+  if(!file) return;
+  const reader = new FileReader();
+  reader.onload = function(event){
+    const text = event.target.result;
+    const parser = new DOMParser();
+    const xmlDoc = parser.parseFromString(text, "text/xml");
+
+    // プレイヤー情報の格納部分
+    allPlayers = {};
+    playerIndex = {};
+    const players = xmlDoc.getElementsByTagName("player");
+
+    Array.from(players).forEach(p=>{
+      const id = p.getAttribute("id");
+      const name = p.getAttribute("name");
+      const surname = p.getAttribute("surname");
+      const native_name = p.getAttribute("native_name");
+
+      allPlayers[id] = {id,name,surname,native_name};
+
+      // 検索用
+      [name,surname,native_name].forEach(n=>{
+        if(n){
+          const key = n.toLowerCase();
+          if(!playerIndex[key]) playerIndex[key] = [];
+          playerIndex[key].push(id);
+        }
+      });
+    });
+
+  // 大会情報の格納部分
+tournamentMap = {}; // 初期化
+const tournaments = xmlDoc.getElementsByTagName("tournament");
+
+Array.from(tournaments).forEach(t => {
+  const id = t.getAttribute("id");
+  const name = t.getAttribute("name");
+  const country = t.getAttribute("country");
+  const city = t.getAttribute("city");
+  const year = parseInt(t.getAttribute("year"), 10);
+  const month = parseInt(t.getAttribute("month"), 10);
+  const start = t.getAttribute("start");
+  const end = t.getAttribute("end");
+  const rule = parseInt(t.getAttribute("rule"), 10);
+  const rated = t.getAttribute("rated") === "1";
+
+  tournamentMap[id] = { 
+    id, name, country, city, year, month, start, end, rule, rated 
+  };
+});
+
+
+// ←ここに allGames を作る
+allTournaments = Object.entries(tournamentMap).map(([id, info]) => {
+  return {
+    id: Number(id),
+    name: info.name,
+    rule: info.rule,
+    year: info.year
+  };
+});
+
+
+
+// 対局情報
+const games = xmlDoc.getElementsByTagName("game");
+allGames = Array.from(games).map(g => {
+  const tid = g.getAttribute("tournament");
+  const tInfo = tournamentMap[tid] || {};
+  return {
+    id: g.getAttribute("id"),
+    tournament: tid,
+    tournamentName: tInfo.name || `大会ID ${tid}`,
+    rule: tInfo.rule || 0,   // ←追加
+    bresult: parseFloat(g.getAttribute("bresult")),
+    opening: g.getAttribute("opening"),
+    black: g.getAttribute("black"),
+    white: g.getAttribute("white"),
+    swap: g.getAttribute("swap"),
+    moves: g.getElementsByTagName("move")[0]?.textContent.trim() || ""
+  };
+});
+
+
+
+
+    alert(`読み込み完了: ${allGames.length} 対局`);
+  };
+  reader.readAsText(file);
+});
+
+ const showHelp = document.getElementById("showHelp");
+  const helpModal = document.getElementById("helpModal");
+  const closeHelp = document.getElementById("closeHelp");
+
+  showHelp.addEventListener("click", function(e){
+    e.preventDefault();
+    helpModal.style.display = "block";
+  });
+
+  closeHelp.addEventListener("click", function(){
+    helpModal.style.display = "none";
+  });
+
+function analyzeTaraguchi(g){
+  const swapRaw = g.swap || "";
+  const swapForCalc = swapRaw.replace(/R/g,"+").padEnd(5,"-");
+
+  const blackFinal = allPlayers[g.black] ? allPlayers[g.black].surname + " " + allPlayers[g.black].name : g.black;
+  const whiteFinal = allPlayers[g.white] ? allPlayers[g.white].surname + " " + allPlayers[g.white].name : g.white;
+
+  let black = blackFinal, white = whiteFinal;
+  const moveOwners = new Array(6);
+
+  for(let i=5;i>=0;i--){
+    moveOwners[i] = ((i+1)%2===1)? black : white;
+    if(i>0 && swapForCalc[i-1]==='+'){
+      [black, white] = [white, black];
+    }
+  }
+  return { moveOwners, swap: swapRaw }; // 表示用には元データを返す
+}
+
+function analyzeSoosrv(g) {
+  const swapRaw = (g.swap || "--").replace(/R/g, "+").padEnd(2, "-");
+  const swapCount = (swapRaw.match(/\+/g) || []).length;
+
+  const blackFinal = allPlayers[g.black]
+    ? allPlayers[g.black].surname + " " + allPlayers[g.black].name
+    : g.black;
+  const whiteFinal = allPlayers[g.white]
+    ? allPlayers[g.white].surname + " " + allPlayers[g.white].name
+    : g.white;
+
+  // 初期状態を決定
+  let black = blackFinal;
+  let white = whiteFinal;
+  if (swapCount % 2 === 1) [black, white] = [white, black];
+
+  const moveOwners = [];
+
+  // 1〜3手目: 初期黒
+  moveOwners.push(black, black, black);
+
+  // 1回目 swap（3手目終了後）
+  if (swapRaw[0] === "+") [black, white] = [white, black];
+
+  // 4手目担当
+  moveOwners.push(white);
+
+  // 2回目 swap（4手目終了後）
+  if (swapRaw[1] === "+") [black, white] = [white, black];
+
+  // 5手目担当
+  moveOwners.push(blackFinal);
+
+  // 手番を分ける
+  const blackMoves = [];
+  const whiteMoves = [];
+  moveOwners.forEach((player, idx) => {
+    if (player === blackFinal) blackMoves.push(idx + 1);
+    else if (player === whiteFinal) whiteMoves.push(idx + 1);
+  });
+
+  return { moveOwners, blackMoves, whiteMoves, swap: swapRaw };
+}
+
+function analyzeRIF(g) {
+  const swapRaw = (g.swap || "-").replace(/R/g, "+"); // Rを+に置換して扱う
+
+  const blackFinal = allPlayers[g.black]
+    ? allPlayers[g.black].surname + " " + allPlayers[g.black].name
+    : g.black;
+  const whiteFinal = allPlayers[g.white]
+    ? allPlayers[g.white].surname + " " + allPlayers[g.white].name
+    : g.white;
+
+  const moveOwners = [];
+
+  if (swapRaw === "-") {
+    // スワップなし
+    moveOwners.push(blackFinal, blackFinal, blackFinal, whiteFinal, blackFinal);
+  } else {
+    // スワップあり
+    moveOwners.push(whiteFinal, whiteFinal, whiteFinal, whiteFinal, blackFinal);
+  }
+
+  // 手番を分ける
+  const blackMoves = [];
+  const whiteMoves = [];
+  moveOwners.forEach((player, idx) => {
+    if (player === blackFinal) blackMoves.push(idx + 1);
+    else if (player === whiteFinal) whiteMoves.push(idx + 1);
+  });
+
+  return { moveOwners, blackMoves, whiteMoves, swap: swapRaw };
+}
+
+
+// swap解析
+function analyzeSwap(g){
+  if (g.rule === 25) {           // Taraguchi-10
+    return analyzeTaraguchi(g);
+  } else if (g.rule === 24) {    // Soosrv
+    return analyzeSoosrv(g);
+  } else if (g.rule === 1 || g.rule === 5) {  // RIF
+    return analyzeRIF(g);
+  } else {
+    // 未対応ルール → Taraguchi と同じに処理
+    return analyzeTaraguchi(g);
+  }
+}
+
+
+// 例: h8 -> {x:7, y:7} （0-indexed）
+function coordToIndex(pos){
+    const col = pos[0].toLowerCase(); // 'a'～'o'
+    const row = parseInt(pos.slice(1),10); // 1～15
+    const x = col.charCodeAt(0) - "a".charCodeAt(0);
+    const y = row - 1;
+    return {x, y};
+}
+
+// 盤面配列に変換（5手目まで）
+function movesToBoard(moves){
+    const size = 15;
+    const board = Array.from({length:size}, ()=>Array(size).fill(null));
+    moves.forEach((playerMove,i)=>{
+        if(!playerMove || playerMove === "-") return;
+        const {x, y} = coordToIndex(playerMove);
+        board[y][x] = i%2===0 ? "B" : "W"; // 0-indexで黒白
+    });
+    return board;
+}
+
+// 正規化キーを作成（回転反転考慮）
+function normalizeBoard(board){
+    const size = board.length;
+
+    function rotate90(b){
+        const newB = Array.from({length:size},()=>Array(size).fill(null));
+        for(let y=0;y<size;y++){
+            for(let x=0;x<size;x++){
+                newB[x][size-1-y] = b[y][x];
+            }
+        }
+        return newB;
+    }
+
+    function flipH(b){
+        return b.map(row => [...row].reverse());
+    }
+
+    function flipV(b){
+        return [...b].reverse();
+    }
+
+    function boardToString(b){
+        return b.map(row=>row.map(c=>c||"-").join("")).join("/");
+    }
+
+    let boards = [];
+    let b = board;
+    for(let i=0;i<4;i++){ // 0°,90°,180°,270°
+        boards.push(boardToString(b));
+        boards.push(boardToString(flipH(b)));
+        b = rotate90(b);
+    }
+
+    // 最小文字列をキーにする
+    return boards.sort()[0];
+}
+
+
+
+// 5手目集計及び同一局面の判定
+function getTop5MovesNormalized(games){
+    const countMap = {};
+    games.forEach(g=>{
+        const swapInfo = analyzeSwap(g);
+        const movesRaw = g.moves.split(/\s+/).slice(0,5); // 元の座標文字列
+        const board = movesToBoard(movesRaw);             // 盤面配列に変換（ここは不要でもOK）
+        const key = normalizeBoard(board);
+        countMap[key] = countMap[key] || {count:0, moves: movesRaw};
+        countMap[key].count++;
+    });
+
+    return Object.values(countMap)
+                 .sort((a,b)=>b.count-a.count)
+                 .slice(0,10);
+}
+
+// 描画範囲
+function getBoardBounds(moves){
+    let minX = 14, maxX = 0, minY = 14, maxY = 0;
+    moves.forEach(m=>{
+        if(!m || m === "-") return;
+        const {x, y} = coordToIndex(m);
+        if(x < minX) minX = x;
+        if(x > maxX) maxX = x;
+        if(y < minY) minY = y;
+        if(y > maxY) maxY = y;
+    });
+    return {minX, maxX, minY, maxY};
+}
+
+function drawBoard(container, moves){
+    const bounds = getBoardBounds(moves);
+    let sizeX = bounds.maxX - bounds.minX + 1;
+    let sizeY = bounds.maxY - bounds.minY + 1;
+    const margin = 2; // 2路分余白
+    sizeX += margin*2;
+    sizeY += margin*2;
+    const cell = 20; // 線間隔
+
+    const board = document.createElement("div");
+    board.style.position="relative";
+    board.style.width = `${cell*(sizeX-1)}px`; // 線の交点数は size-1 区間
+    board.style.height = `${cell*(sizeY-1)}px`;
+    board.style.border="1px solid #000";
+    board.style.background="#F9EBCF";
+
+    // 縦線
+    for(let i=0;i<sizeX;i++){
+        const v = document.createElement("div");
+        v.style.position="absolute";
+        v.style.left = `${i*cell}px`;
+        v.style.top = "0";
+        v.style.width = "1px";
+        v.style.height = "100%";
+        v.style.background="#000";
+        board.appendChild(v);
+    }
+
+    // 横線
+    for(let i=0;i<sizeY;i++){
+        const h = document.createElement("div");
+        h.style.position="absolute";
+        h.style.top = `${i*cell}px`;
+        h.style.left = "0";
+        h.style.width = "100%";
+        h.style.height = "1px";
+        h.style.background="#000";
+        board.appendChild(h);
+    }
+
+    // 石描画（交点上に置く）
+    moves.forEach((m,i)=>{
+        if(!m || m === "-") return;
+        const {x: origX, y: origY} = coordToIndex(m);
+        const x = origX - bounds.minX + margin;
+        const y = sizeY - 1 - (origY - bounds.minY + margin); // 上下反転
+
+        const stone = document.createElement("div");
+        stone.style.position="absolute";
+        stone.style.width=`${cell-4}px`;
+        stone.style.height=`${cell-4}px`;
+        stone.style.borderRadius="50%";
+        stone.style.background = i%2===0?"black":"white";
+        stone.style.left = `${x*cell - (cell-4)/2}px`;
+        stone.style.top = `${y*cell - (cell-4)/2}px`;
+        board.appendChild(stone);
+
+        const label = document.createElement("div");
+        label.textContent = (i+1).toString();
+        label.style.position="absolute";
+        label.style.left = `${x*cell}px`;
+        label.style.top = `${y*cell}px`;
+        label.style.fontSize = "12px";
+        label.style.color = i%2===0?"white":"black";
+        label.style.fontWeight = "bold";
+        label.style.textAlign = "center";
+        label.style.lineHeight = "1";
+        label.style.transform = "translate(-50%, -50%)";
+        board.appendChild(label);
+    });
+
+    container.appendChild(board);
+}
+
+
+
+// 大会集計後に5手目までランキング描画を呼び出す
+// 共通: Top5を描画する
+// pids が指定されていれば「そのプレイヤー別の勝敗集計」も追加表示する
+function renderTop5Moves(filteredGames, containerId, pids = null) {
+  const container = document.getElementById(containerId);
+  container.innerHTML = "";
+
+  const top5Moves = getTop5MovesNormalized(filteredGames);
+  if (!top5Moves || top5Moves.length === 0) {
+    container.innerHTML = "Top5着手は見つかりませんでした";
+    return;
+  }
+
+  top5Moves.forEach((item, i) => {
+    const wrapper = document.createElement("div");
+    wrapper.style.marginBottom = "20px";
+    wrapper.style.display = "flex";
+    wrapper.style.alignItems = "flex-start";
+
+    // 左側: 盤面
+    const boardDiv = document.createElement("div");
+    const title = document.createElement("div");
+    title.textContent = `${i + 1}位: ${item.count}回`;
+    boardDiv.appendChild(title);
+    drawBoard(boardDiv, item.moves);
+
+    // 該当ゲームを取得
+    const key = normalizeBoard(movesToBoard(item.moves));
+    const gamesForThisKey = filteredGames.filter(g => {
+      const gKey = normalizeBoard(movesToBoard(g.moves.split(/\s+/).slice(0, 5)));
+      return gKey === key;
+    });
+
+    // 勝敗集計（全体）
+    let blackWins = 0, whiteWins = 0, draws = 0;
+
+    // プレイヤー別集計（複数対応）
+    const playerResults = {};
+    if (Array.isArray(pids)) {
+      pids.forEach(pid => {
+        let name = pid;
+        if (allPlayers[pid]) name = allPlayers[pid].surname + " " + allPlayers[pid].name;
+        playerResults[pid] = { name, wins: 0, loses: 0, draws: 0 };
+      });
+    }
+
+    gamesForThisKey.forEach(g => {
+      // 全体集計
+      if (g.bresult == 1) blackWins++;
+      else if (g.bresult == 0) whiteWins++;
+      else if (g.bresult == 0.5) draws++;
+
+      // プレイヤー別集計
+      if (Array.isArray(pids)) {
+        pids.forEach(pid => {
+          const isBlack = g.black === pid;
+          const isWhite = g.white === pid;
+
+          if (isBlack && g.bresult == 1) playerResults[pid].wins++;
+          else if (isWhite && g.bresult == 0) playerResults[pid].wins++;
+          else if ((isBlack && g.bresult == 0) || (isWhite && g.bresult == 1)) playerResults[pid].loses++;
+          else if (g.bresult == 0.5 && (isBlack || isWhite)) playerResults[pid].draws++;
+        });
+      }
+    });
+
+    // 左側盤面の下に勝敗表示（比率付き）
+    const totalGamesForType = blackWins + whiteWins + draws;
+    const resultDiv = document.createElement("div");
+    resultDiv.style.marginTop = "5px";
+    resultDiv.textContent = `黒: ${blackWins}勝 (${totalGamesForType ? ((blackWins/totalGamesForType)*100).toFixed(1) : 0}%), 白: ${whiteWins}勝 (${totalGamesForType ? ((whiteWins/totalGamesForType)*100).toFixed(1) : 0}%), 引き分け: ${draws}回 (${totalGamesForType ? ((draws/totalGamesForType)*100).toFixed(1) : 0}%)`;
+    boardDiv.appendChild(resultDiv);
+
+    // ★ プレイヤー別集計を追加表示（比率付き）
+    if (Array.isArray(pids)) {
+      Object.values(playerResults).forEach(pr => {
+        const totalGamesForPlayer = pr.wins + pr.loses + pr.draws;
+        if (totalGamesForPlayer === 0) return; // 対局なしは非表示
+        const div = document.createElement("div");
+        div.style.marginTop = "3px";
+        div.style.fontWeight = "bold";
+        div.textContent = `${pr.name} → 勝ち:${pr.wins} (${((pr.wins/totalGamesForPlayer)*100).toFixed(1)}%), 負け:${pr.loses} (${((pr.loses/totalGamesForPlayer)*100).toFixed(1)}%), 引き分け:${pr.draws} (${((pr.draws/totalGamesForPlayer)*100).toFixed(1)}%)`;
+        boardDiv.appendChild(div);
+      });
+    }
+
+    // 右側: 該当ゲーム一覧
+    const listDiv = document.createElement("div");
+    listDiv.style.marginLeft = "20px";
+    const ul = document.createElement("ul");
+
+    gamesForThisKey.forEach(g => {
+      const li = document.createElement("li");
+      const url = `https://www.renju.net/tournament/${g.tournament}/game/${g.id}/`;
+      const openingName = openingMap[g.opening] || g.opening;
+      const blackName = allPlayers[g.black] ? allPlayers[g.black].surname + " " + allPlayers[g.black].name : g.black;
+      const whiteName = allPlayers[g.white] ? allPlayers[g.white].surname + " " + allPlayers[g.white].name : g.white;
+      const resultText = g.bresult == 1 ? "黒勝ち" : g.bresult == 0 ? "白勝ち" : "引き分け";
+
+      li.innerHTML = `<a href="${url}" target="_blank">${g.id}</a> (${openingName}) - 黒: ${blackName}, 白: ${whiteName} → ${resultText}`;
+      ul.appendChild(li);
+    });
+
+    listDiv.appendChild(ul);
+    wrapper.appendChild(boardDiv);
+    wrapper.appendChild(listDiv);
+    container.appendChild(wrapper);
+  });
+}
+
+
+
+
+
+// キーワード検索処理
+let currentMatches = []; // 現在の検索結果全件
+let displayedCount = 0;  // 今表示している件数
+
+function showNextBatch(existingIds = []) {
+  const suggestionsDiv = document.getElementById("suggestions");
+  const nextBatch = currentMatches.slice(displayedCount, displayedCount + 10);
+
+  nextBatch.forEach(g => {
+    const checkbox = document.createElement("input");
+    checkbox.type = "checkbox";
+    checkbox.value = g.id;
+    if (existingIds.includes(g.id)) checkbox.checked = true;
+
+    const label = document.createElement("label");
+    label.appendChild(checkbox);
+    label.appendChild(document.createTextNode(` ${g.name} (ID: ${g.id})`));
+
+    const div = document.createElement("div");
+    div.appendChild(label);
+    suggestionsDiv.appendChild(div);
+
+    checkbox.addEventListener("change", updateTournamentIds);
+  });
+
+  displayedCount += nextBatch.length;
+
+  let moreBtn = document.getElementById("moreBtn");
+  if (displayedCount < currentMatches.length) {
+    if (!moreBtn) {
+      moreBtn = document.createElement("button");
+      moreBtn.id = "moreBtn";
+      moreBtn.textContent = "もっと見る";
+      moreBtn.addEventListener("click", () => showNextBatch(existingIds));
+      suggestionsDiv.appendChild(moreBtn);
+    }
+  } else if (moreBtn) {
+    moreBtn.remove();
+  }
+}
+
+function updateTournamentIds() {
+  const inputEl = document.getElementById("tournamentId");
+  const existingIds = inputEl.value
+                          .split(",")
+                          .map(s => s.trim())
+                          .filter(s => s);
+
+  const checkedIds = Array.from(document.querySelectorAll("#suggestions input[type=checkbox]:checked"))
+                          .map(cb => cb.value);
+
+  const newIdsSet = new Set([
+    ...existingIds.filter(id => !currentMatches.some(c => c.id === id)),
+    ...checkedIds
+  ]);
+
+  inputEl.value = Array.from(newIdsSet).join(",");
+}
+
+
+
+document.addEventListener("DOMContentLoaded", () => {
+  document.getElementById("keyword").addEventListener("input", runSearch);
+
+  document.querySelectorAll('input[name="matchType"]').forEach(rb => {
+    rb.addEventListener("change", runSearch);
+  });
+
+  // チェックボックスの内容を反映
+  document.querySelectorAll('.ruleCheckbox').forEach(cb => {
+    cb.addEventListener("change", runSearch);
+  });
+});
+
+
+
+function runSearch() {
+  const keywordInput = document.getElementById("keyword");
+  const tournamentInput = document.getElementById("tournamentId");
+  const suggestionsDiv = document.getElementById("suggestions");
+
+  if (!keywordInput || !tournamentInput || !suggestionsDiv) {
+    console.error("DOM要素が見つかりません");
+    return;
+  }
+
+  const keyword = keywordInput.value.trim();
+  if (!keyword) {
+    suggestionsDiv.innerHTML = "";
+    displayedCount = 0;
+    return;
+  }
+
+  const matchType = document.querySelector('input[name="matchType"]:checked')?.value || "partial";
+  const partialMatch = document.getElementById("matchPartial")?.checked;
+  const startMatch   = document.getElementById("matchStart")?.checked;
+  const yearFrom = parseInt(document.getElementById("yearFrom")?.value) || null;
+const yearTo   = parseInt(document.getElementById("yearTo")?.value) || null;
+const ruleFilter = document.getElementById("ruleSelect")?.value || "";
+
+  suggestionsDiv.innerHTML = "";
+  displayedCount = 0;
+
+const selectedRules = Array.from(document.querySelectorAll(".ruleCheckbox:checked"))
+                           .map(cb => parseInt(cb.value, 10)); // 数値化
+
+
+
+currentMatches = allTournaments.filter(t => {
+  const name = t.name.toLowerCase();
+  const kw = keyword.toLowerCase();
+  // ルールチェック
+const ruleId = parseInt(t.rule, 10);  // 数値化
+if (selectedRules.length > 0 && !selectedRules.includes(ruleId)) return false;
+
+
+  console.log(t.name, t.rule, selectedRules.includes(t.rule));
+
+
+  // 1. キーワード検索
+  let nameMatch = false;
+  if (matchType === "regex") {
+    try {
+      nameMatch = new RegExp(keyword, "i").test(t.name);
+    } catch (e) {
+      console.error("無効な正規表現です:", e);
+      suggestionsDiv.innerHTML = "無効な正規表現です";
+      return false;
+    }
+  } else {
+    if (startMatch && name.startsWith(kw)) nameMatch = true;
+    else if (partialMatch && name.includes(kw)) nameMatch = true;
+  }
+  if (!nameMatch) return false;
+
+  // 2. 年の範囲
+  const year = parseInt(t.year);
+  if ((yearFrom && year < yearFrom) || (yearTo && year > yearTo)) return false;
+
+  // 3. ルールのチェックボックス
+  if (selectedRules.length > 0 && !selectedRules.includes(t.rule)) return false;
+
+  return true;
+});
+
+
+  // 現在入力済みIDを保持
+  const existingIds = tournamentInput.value
+                        .split(",")
+                        .map(s => s.trim())
+                        .filter(s => s);
+
+  showNextBatch(existingIds);
+}
+
+
+
+
+
+
+document.addEventListener("DOMContentLoaded", () => {
+  const analyzeBtn = document.getElementById("analyzeBtn");
+  if (!analyzeBtn) {
+    console.warn("analyzeBtn が見つかりません");
+    return;
+  }
+
+  analyzeBtn.addEventListener("click", function() {
+    const tid = document.getElementById("tournamentId").value.trim();
+    if (!tid) { alert("大会IDを入力してください"); return; }
+
+    const tidArray = tid.split(",").map(s => s.trim()).filter(s => s).map(Number);
+    const filteredmultiple = allGames.filter(g => tidArray.includes(Number(g.tournament)));
+    if (filteredmultiple.length === 0) { alert("該当大会なし"); return; }
+
+    const tournamentList = tidArray.map(id => {
+      const name = tournamentMap[id]?.name || `大会ID ${id}`;
+      const url = `https://www.renju.net/tournament/${id}/`;
+      return `<a href="${url}" target="_blank">${name}</a>`;
+    });
+    const tournamentHtml = tournamentList.join(", ");
+
+    let blackWin=0, draw=0, whiteWin=0, totalMoves=0, blackMoves=0, whiteMoves=0, drawMoves=0;
+    const openingCount={}, openingWins={};
+    let firstMoveWin=0, secondMoveWin=0, thirdMoveWin=0, fourthMoveWin=0, fifthMoveWin=0;
+    let combo34Win=0, combo35Win=0, combo45Win=0;
+    let secondDirectTotal=0, secondIndirectTotal=0;
+
+    filteredmultiple.forEach(g => {
+      const movesCount = g.moves ? g.moves.split(/\s+/).length : 0;
+      totalMoves += movesCount;
+      if (g.bresult === 1) { blackWin++; blackMoves+=movesCount; }
+      else if (g.bresult === 0.5) { draw++; drawMoves+=movesCount; }
+      else if (g.bresult === 0) { whiteWin++; whiteMoves+=movesCount; }
+
+      openingCount[g.opening] = (openingCount[g.opening] || 0) + 1;
+      openingWins[g.opening] = openingWins[g.opening] || {black:0,white:0,draw:0};
+      if (g.bresult===1) openingWins[g.opening].black++;
+      else if (g.bresult===0) openingWins[g.opening].white++;
+      else openingWins[g.opening].draw++;
+
+      const swapInfo = analyzeSwap(g);
+      if(swapInfo.moveOwners.length >= 5){
+        const blackName = allPlayers[g.black]?.surname + " " + allPlayers[g.black]?.name;
+        const whiteName = allPlayers[g.white]?.surname + " " + allPlayers[g.white]?.name;
+        let winner = null;
+        if(g.bresult===1) winner=blackName;
+        if(g.bresult===0) winner=whiteName;
+
+        if(winner){
+          if(swapInfo.moveOwners[0]===winner) firstMoveWin++;
+          if(swapInfo.moveOwners[1]===winner) secondMoveWin++;
+          if(swapInfo.moveOwners[2]===winner) thirdMoveWin++;
+          if(swapInfo.moveOwners[3]===winner) fourthMoveWin++;
+          if(swapInfo.moveOwners[4]===winner) fifthMoveWin++;
+          if(swapInfo.moveOwners[2]===winner && swapInfo.moveOwners[3]===winner) combo34Win++;
+          if(swapInfo.moveOwners[2]===winner && swapInfo.moveOwners[4]===winner) combo35Win++;
+          if(swapInfo.moveOwners[3]===winner && swapInfo.moveOwners[4]===winner) combo45Win++;
+        }
+      }
+
+      if(movesCount>=2){
+        const secondMove = g.moves.split(/\s+/)[1];
+        const col = secondMove[0];
+        if(col==="h") secondDirectTotal++;
+        else if(col==="i"||col==="g") secondIndirectTotal++;
+      }
+    });
+
+    const drawRatio = (draw/filteredmultiple.length*100).toFixed(2);
+    const avgTotal = (totalMoves/filteredmultiple.length).toFixed(2);
+    const avgBlack = blackWin?(blackMoves/blackWin).toFixed(2):"-";
+    const avgWhite = whiteWin?(whiteMoves/whiteWin).toFixed(2):"-";
+    const avgDraw = draw?(drawMoves/draw).toFixed(2):"-";
+    const secondDirectRatio = ((secondDirectTotal/filteredmultiple.length)*100).toFixed(2);
+    const secondIndirectRatio = ((secondIndirectTotal/filteredmultiple.length)*100).toFixed(2);
+
+    const swapCount={};
+    filteredmultiple.forEach(g=>{
+      if(g.swap){
+        const normSwap = g.swap.replace(/R/g,"+");
+        swapCount[normSwap] = (swapCount[normSwap]||0)+1;
+      }
+    });
+
+    let mostSwapCount=0;
+    Object.values(swapCount).forEach(c=>{ if(c>mostSwapCount) mostSwapCount=c; });
+    const mostSwapPatterns = Object.entries(swapCount)
+      .filter(([_,c]) => c === mostSwapCount)
+      .map(([pattern,c]) => `${pattern}（${c}回）`)
+      .join(", ");
+
+    const totalGames = blackWin + whiteWin + draw;
+
+    document.getElementById("stats").innerHTML = `
+      大会: ${tournamentHtml}<br><br>
+      該当対局数: ${filteredmultiple.length}<br>
+      黒勝ち: ${blackWin} (${totalGames ? ((blackWin/totalGames)*100).toFixed(2) : "0.00"}%)<br>
+      白勝ち: ${whiteWin} (${totalGames ? ((whiteWin/totalGames)*100).toFixed(2) : "0.00"}%)<br>
+      引き分け: ${draw} (${totalGames ? ((draw/totalGames)*100).toFixed(2) : "0.00"}%)<br><br>
+      大会全体平均手数: ${avgTotal}<br>
+      黒勝ち平均手数: ${avgBlack}<br>
+      白勝ち平均手数: ${avgWhite}<br>
+      引き分け平均手数: ${avgDraw}<br>
+      1手目着手者勝利数: ${firstMoveWin} (${((firstMoveWin/(blackWin+whiteWin))*100).toFixed(2)}%)<br>
+      2手目着手者勝利数: ${secondMoveWin} (${((secondMoveWin/(blackWin+whiteWin))*100).toFixed(2)}%)<br>
+      3手目着手者勝利数: ${thirdMoveWin} (${((thirdMoveWin/(blackWin+whiteWin))*100).toFixed(2)}%)<br>
+      4手目着手者勝利数: ${fourthMoveWin} (${((fourthMoveWin/(blackWin+whiteWin))*100).toFixed(2)}%)<br>
+      5手目着手者勝利数: ${fifthMoveWin} (${((fifthMoveWin/(blackWin+whiteWin))*100).toFixed(2)}%)<br>
+      3+4手目同一着手者勝利数: ${combo34Win} (${((combo34Win/(blackWin+whiteWin))*100).toFixed(2)}%)<br>
+      3+5手目同一着手者勝利数: ${combo35Win} (${((combo35Win/(blackWin+whiteWin))*100).toFixed(2)}%)<br>
+      4+5手目同一着手者勝利数: ${combo45Win} (${((combo45Win/(blackWin+whiteWin))*100).toFixed(2)}%)<br>
+      2手目直接着手: ${secondDirectTotal} (${secondDirectRatio}%)<br>
+      2手目間接着手: ${secondIndirectTotal} (${secondIndirectRatio}%)<br>
+      最多スワップパターン: ${mostSwapPatterns || "-"}<br>
+    `;
+
+    // --- maxSwapPattern を定義 ---
+    const maxSwapPattern = Object.keys(swapCount).reduce((a,b)=>swapCount[a]>=swapCount[b]?a:b,"");
+    const matchingGames = filteredmultiple.filter(g=>{
+      if(!g.swap) return false;
+      const normSwap = g.swap.replace(/R/g,"+");
+      return normSwap === maxSwapPattern;
+    });
+
+    const mostSwapExampleDiv = document.getElementById("mostSwapExample");
+    if(matchingGames.length>0){
+      const game = matchingGames[Math.floor(Math.random()*matchingGames.length)];
+      const url = `https://www.renju.net/tournament/${game.tournament}/game/${game.id}/`;
+      const blackName = allPlayers[game.black]?.surname+" "+allPlayers[game.black]?.name || game.black;
+      const whiteName = allPlayers[game.white]?.surname+" "+allPlayers[game.white]?.name || game.white;
+
+      const movesRaw = game.moves.split(/\s+/).slice(0,5);
+      const swapInfo = analyzeSwap(game);
+      const moveOwnerText = movesRaw.map((m,i)=>{
+        const owner = swapInfo.moveOwners[i] || "-";
+        return `${i+1}手目: ${m} (${owner})`;
+      }).join("<br>");
+
+      mostSwapExampleDiv.innerHTML = `
+        <p>最多スワップパターン "${maxSwapPattern}" に当てはまる例:</p>
+        <p><a href="${url}" target="_blank">対局ID: ${game.id}</a></p>
+        <p>黒: ${blackName}, 白: ${whiteName}</p>
+        <p>${moveOwnerText}</p>
+      `;
+    } else {
+      mostSwapExampleDiv.innerHTML = `<p>最多スワップパターン "${maxSwapPattern}" に当てはまる対局はありません。</p>`;
+    }
+
+    const topOpenings = Object.entries(openingCount).sort((a,b)=>b[1]-a[1]).slice(0,10);
+    const tbody = document.querySelector("#openingTable tbody");
+    tbody.innerHTML="";
+    topOpenings.forEach((o,i)=>{
+      const openingName = openingMap[o[0]]||o[0];
+      tbody.innerHTML+=`<tr><td>${i+1}</td><td>${openingName}</td><td>${o[1]}</td></tr>`;
+    });
+
+    renderTop5Moves(filteredmultiple,"top5MovesContainer");
+
+    const tbody2 = document.querySelector("#openingWinRateTable tbody");
+    tbody2.innerHTML="";
+    Object.entries(openingWins).forEach(([id,val])=>{
+      const total = val.black+val.white+val.draw;
+      const name = openingMap[id]||id;
+      tbody2.innerHTML+=`<tr><td>${name}</td>
+        <td>${((val.black/total)*100).toFixed(2)}%</td>
+        <td>${((val.white/total)*100).toFixed(2)}%</td>
+        <td>${((val.draw/total)*100).toFixed(2)}%</td>
+        <td>${total}</td></tr>`;
+    });
+  });
+});
+
+// プレイヤー別集計
+// プレイヤー別集計
+document.getElementById("analyzePlayerBtn").addEventListener("click", function() {
+  const container = document.getElementById("playerStats");
+  container.innerHTML = "";
+
+  const nameInputs = document.getElementById("playerInput").value
+                      .split(",")
+                      .map(s => s.trim().toLowerCase())
+                      .filter(s => s);
+  const tidInput = document.getElementById("tournamentId").value.trim();
+
+  if (!nameInputs.length || !tidInput) {
+    alert("プレイヤー名と大会IDを入力してください");
+    return;
+  }
+
+  const tidArray = tidInput.split(",").map(s => s.trim()).filter(s => s).map(Number);
+  const selectedPids = nameInputs.flatMap(name => playerIndex[name] || []);
+
+  if (!selectedPids.length) {
+    alert("該当プレイヤーが見つかりません");
+    return;
+  }
+
+  const filteredGames = allGames.filter(g => {
+    if (tidArray.length && !tidArray.includes(Number(g.tournament))) return false;
+    const gamePlayers = [g.black, g.white];
+    if (nameInputs.length === 1) {
+      return selectedPids.some(pid => gamePlayers.includes(pid));
+    } else {
+      for (let i = 0; i < selectedPids.length; i++) {
+        for (let j = i + 1; j < selectedPids.length; j++) {
+          if ([selectedPids[i], selectedPids[j]].every(pid => gamePlayers.includes(pid))) return true;
+        }
+      }
+      return false;
+    }
+  });
+
+  if (!filteredGames.length) {
+    alert("該当大会に対局なし");
+    return;
+  }
+
+  const actualPids = Array.from(new Set(filteredGames.flatMap(g => [g.black, g.white])))
+                           .filter(pid => selectedPids.includes(pid));
+
+  if (!actualPids.length) {
+    alert("該当プレイヤーの対局なし");
+    return;
+  }
+
+  proceedAnalysis(actualPids, filteredGames);
+
+  function proceedAnalysis(pids, games) {
+    const statsByPlayer = {};
+
+    pids.forEach(pid => {
+      const nameObj = allPlayers[pid];
+      const playerName = nameObj.surname + " " + nameObj.name;
+
+      const s = {
+        blackWin:0, whiteWin:0, blackLose:0, whiteLose:0, blackDraw:0, whiteDraw:0,
+        blackWinMoves:0, whiteWinMoves:0, blackLoseMoves:0, whiteLoseMoves:0,
+        blackDrawMoves:0, whiteDrawMoves:0, opening3Count:{}, secondDirect:0, secondIndirect:0
+      };
+
+      let firstMoveWin=0, secondMoveWin=0, thirdMoveWin=0, fourthMoveWin=0, fifthMoveWin=0;
+      let combo34Win=0, combo35Win=0, combo45Win=0;
+
+      games.forEach(g => {
+        if (!(g.black===pid || g.white===pid)) return;
+
+        const moves = g.moves ? g.moves.split(/\s+/) : [];
+        const movesCount = moves.length;
+        const swapInfo = analyzeSwap(g);
+
+        const isBlack = g.black === pid;
+        const isWhite = g.white === pid;
+
+        if (isBlack && g.bresult===1) { s.blackWin++; s.blackWinMoves+=movesCount; }
+        if (isWhite && g.bresult===0) { s.whiteWin++; s.whiteWinMoves+=movesCount; }
+        if (isBlack && g.bresult===0) { s.blackLose++; s.blackLoseMoves+=movesCount; }
+        if (isWhite && g.bresult===1) { s.whiteLose++; s.whiteLoseMoves+=movesCount; }
+        if (isBlack && g.bresult===0.5) { s.blackDraw++; s.blackDrawMoves+=movesCount; }
+        if (isWhite && g.bresult===0.5) { s.whiteDraw++; s.whiteDrawMoves+=movesCount; }
+
+        if (swapInfo.moveOwners.length>=3 && swapInfo.moveOwners[2]===playerName) {
+          const openingName = openingMap[g.opening] || g.opening;
+          s.opening3Count[openingName] = (s.opening3Count[openingName]||0)+1;
+        }
+
+        if (movesCount>=2 && swapInfo.moveOwners[1]===playerName) {
+          const col = moves[1][0];
+          if (col==='h') s.secondDirect++;
+          else if (col==='i'||col==='g') s.secondIndirect++;
+        }
+
+        const winnerName = g.bresult===1 ? allPlayers[g.black].surname+" "+allPlayers[g.black].name
+                         : g.bresult===0 ? allPlayers[g.white].surname+" "+allPlayers[g.white].name
+                         : null;
+        const playerWon = winnerName===playerName;
+
+        if (swapInfo.moveOwners.length>=5){
+          if(swapInfo.moveOwners[0]===playerName && playerWon) firstMoveWin++;
+          if(swapInfo.moveOwners[1]===playerName && playerWon) secondMoveWin++;
+          if(swapInfo.moveOwners[2]===playerName && playerWon) thirdMoveWin++;
+          if(swapInfo.moveOwners[3]===playerName && playerWon) fourthMoveWin++;
+          if(swapInfo.moveOwners[4]===playerName && playerWon) fifthMoveWin++;
+
+          if(swapInfo.moveOwners[2]===playerName && swapInfo.moveOwners[3]===playerName && playerWon) combo34Win++;
+          if(swapInfo.moveOwners[2]===playerName && swapInfo.moveOwners[4]===playerName && playerWon) combo35Win++;
+          if(swapInfo.moveOwners[3]===playerName && swapInfo.moveOwners[4]===playerName && playerWon) combo45Win++;
+        }
+      });
+
+      const totalGames = games.filter(g => g.black===pid || g.white===pid).length;
+      const totalWin  = s.blackWin + s.whiteWin;
+      const totalLose = s.blackLose + s.whiteLose;
+      const totalDraw = s.blackDraw + s.whiteDraw;
+      const opening3List = Object.entries(s.opening3Count).map(([k,v])=>`${k}(${v})`).join(", ");
+
+      statsByPlayer[playerName] = {
+        s, totalWin, totalLose, totalDraw, totalGames, pid, opening3List,
+        firstMoveWin, secondMoveWin, thirdMoveWin, fourthMoveWin, fifthMoveWin,
+        combo34Win, combo35Win, combo45Win
+      };
+    });
+
+    // 表示
+    container.innerHTML = "";
+    Object.entries(statsByPlayer).forEach(([playerName, data]) => {
+      const { s, totalWin, totalLose, totalDraw, totalGames, pid, opening3List,
+              firstMoveWin, secondMoveWin, thirdMoveWin, fourthMoveWin, fifthMoveWin,
+              combo34Win, combo35Win, combo45Win } = data;
+      if (totalGames === 0) return;
+
+      const div = document.createElement("div");
+
+      // 累計勝敗テーブル
+      const summaryTable = document.createElement("table");
+      summaryTable.border = "1";
+      summaryTable.style.borderCollapse = "collapse";
+      summaryTable.style.width = "45%";
+      summaryTable.style.marginBottom = "1em";
+      summaryTable.innerHTML = `
+        <thead>
+          <tr><th>${playerName}から見た累計勝敗</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>勝ち: ${totalWin} / 負け: ${totalLose} / 引き分け: ${totalDraw} （合計 ${totalGames}局）</td>
+          </tr>
+        </tbody>
+      `;
+      div.appendChild(summaryTable);
+
+      // 統計情報
+      const statsDiv = document.createElement("div");
+      statsDiv.style.float = "left";
+      statsDiv.style.width = "45%";
+      statsDiv.style.marginRight = "5%";
+      statsDiv.innerHTML = `
+        プレイヤー: ${playerName} (id=${pid})<br>
+        黒勝ち: ${s.blackWin}<br>
+        白勝ち: ${s.whiteWin}<br>
+        黒負け: ${s.blackLose}<br>
+        白負け: ${s.whiteLose}<br>
+        黒勝ち平均手数: ${s.blackWin ? (s.blackWinMoves/s.blackWin).toFixed(1) : "-"}<br>
+        白勝ち平均手数: ${s.whiteWin ? (s.whiteWinMoves/s.whiteWin).toFixed(1) : "-"}<br>
+        黒負け平均手数: ${s.blackLose ? (s.blackLoseMoves/s.blackLose).toFixed(1) : "-"}<br>
+        白負け平均手数: ${s.whiteLose ? (s.whiteLoseMoves/s.whiteLose).toFixed(1) : "-"}<br>
+        黒番引き分け平均手数: ${s.blackDraw ? (s.blackDrawMoves/s.blackDraw).toFixed(1) : "-"}<br>
+        白番引き分け平均手数: ${s.whiteDraw ? (s.whiteDrawMoves/s.whiteDraw).toFixed(1) : "-"}<br>
+        3手目着手珠型（登場回数）: ${opening3List}<br>
+        2手目直接着手: ${s.secondDirect}<br>
+        2手目間接着手: ${s.secondIndirect}<br>
+        1手目着手者勝利数: ${firstMoveWin} (${((firstMoveWin/totalWin)*100).toFixed(2)}%)<br>
+        2手目着手者勝利数: ${secondMoveWin} (${((secondMoveWin/totalWin)*100).toFixed(2)}%)<br>
+        3手目着手者勝利数: ${thirdMoveWin} (${((thirdMoveWin/totalWin)*100).toFixed(2)}%)<br>
+        4手目着手者勝利数: ${fourthMoveWin} (${((fourthMoveWin/totalWin)*100).toFixed(2)}%)<br>
+        5手目着手者勝利数: ${fifthMoveWin} (${((fifthMoveWin/totalWin)*100).toFixed(2)}%)<br>
+        3+4手目同一着手者勝利数: ${combo34Win} (${((combo34Win/totalWin)*100).toFixed(2)}%)<br>
+        3+5手目同一着手者勝利数: ${combo35Win} (${((combo35Win/totalWin)*100).toFixed(2)}%)<br>
+        4+5手目同一着手者勝利数: ${combo45Win} (${((combo45Win/totalWin)*100).toFixed(2)}%)<br>
+      `;
+      div.appendChild(statsDiv);
+
+      // 対局一覧
+      const table = document.createElement("table");
+      table.border = "1";
+      table.style.borderCollapse = "collapse";
+      table.style.width = "45%";
+      table.style.float = "left";
+
+      const thead = document.createElement("thead");
+      thead.innerHTML = `
+        <tr>
+          <th>リンク</th>
+          <th>対局者</th>
+          <th>結果</th>
+          <th>${playerName}から見た勝敗</th>
+        </tr>
+      `;
+      table.appendChild(thead);
+
+      const tbody = document.createElement("tbody");
+      games.filter(g => g.black===pid || g.white===pid).forEach(g => {
+        const tr = document.createElement("tr");
+        const url = `https://www.renju.net/tournament/${g.tournament}/game/${g.id}/`;
+        const players = `${allPlayers[g.black].surname} ${allPlayers[g.black].name} vs ${allPlayers[g.white].surname} ${allPlayers[g.white].name}`;
+        const result = g.bresult===1 ? "黒勝ち" : g.bresult===0 ? "白勝ち" : "引き分け";
+
+        let playerRecord = "";
+        if (g.bresult===0.5) playerRecord="引き分け";
+        else if ((g.black===pid && g.bresult===1) || (g.white===pid && g.bresult===0)) playerRecord="勝ち";
+        else playerRecord="負け";
+
+        tr.innerHTML = `
+          <td><a href="${url}" target="_blank">${g.id}</a></td>
+          <td>${players}</td>
+          <td>${result}</td>
+          <td>${playerRecord}</td>
+        `;
+        tbody.appendChild(tr);
+      });
+      table.appendChild(tbody);
+      div.appendChild(table);
+      container.appendChild(div);
+
+      const clearDiv = document.createElement("div");
+      clearDiv.style.clear = "both";
+      container.appendChild(clearDiv);
+    });
+
+    renderTop5Moves(games, "tournamentplayerTop5MovesContainer", pids);
+  }
+});
+
+
+
+
+
+
+// スワップ履歴検索（修正版）
+document.getElementById("searchSwapBtn").addEventListener("click",function(){
+  const nameInput=document.getElementById("swapPlayerInput").value.trim().toLowerCase();
+  const tid=document.getElementById("tournamentId").value.trim();
+  if(!nameInput||!tid){ alert("プレイヤー名と大会IDを入力してください"); return; }
+
+   const tidArray = tid.split(",").map(s => s.trim()).filter(s => s).map(Number);
+
+  const candidates = playerIndex[nameInput];
+  if(!candidates){ alert("該当プレイヤーが見つかりません"); return; }
+
+  let pid;
+  if(candidates.length > 1){
+    let choiceMsg = "複数の候補が見つかりました:\n";
+    candidates.forEach((id,i)=>{
+      const p = allPlayers[id];
+      choiceMsg += `${i+1}: ${p.surname} ${p.name} (id=${id})\n`;
+    });
+    const sel = prompt(choiceMsg + "番号を入力してください");
+    const index = parseInt(sel)-1;
+    if(isNaN(index) || index<0 || index>=candidates.length){ 
+      alert("無効な選択です"); return; 
+    }
+    pid = candidates[index];
+  } else {
+    pid = candidates[0];
+  }
+
+   const filteredmultiple = allGames.filter(
+    g => tidArray.includes(Number(g.tournament)) && (g.black === pid || g.white === pid)
+  );
+  if(filteredmultiple.length===0){ alert("該当大会に対局なし"); return; }
+
+  // テーブル作成処理
+  let tableHtml = `
+    <table border="1" style="border-collapse:collapse; margin-top:10px; width:100%;">
+      <thead>
+        <tr>
+          <th>Game</th>
+          <th>珠型</th>
+          <th>swap</th>
+          <th>2手目</th>
+          <th>1手目</th>
+          <th>2手目</th>
+          <th>3手目</th>
+          <th>4手目</th>
+          <th>5手目</th>
+        </tr>
+      </thead>
+      <tbody>
+  `;
+
+  filteredmultiple.forEach(g=>{
+    const swapInfo = analyzeSwap(g);
+    const moves = g.moves.split(/\s+/);
+    const second = moves[1]||"";
+    let type="";
+    if(second){
+      const col = second[0];
+      if(col==="h") type="直接";
+      else if(col==="i"||col==="g") type="間接";
+    }
+    const url = `https://www.renju.net/tournament/${tid}/game/${g.id}/`;
+    const openingName = openingMap[g.opening] || g.opening;
+
+    tableHtml += `
+      <tr>
+        <td><a href="${url}" target="_blank">${g.id}</a></td>
+        <td>${openingName}</td>
+        <td>${swapInfo.swap.replace(/R/g, "+")}</td>
+        <td>${type}</td>
+        <td>${swapInfo.moveOwners[0]||""}</td>
+        <td>${swapInfo.moveOwners[1]||""}</td>
+        <td>${swapInfo.moveOwners[2]||""}</td>
+        <td>${swapInfo.moveOwners[3]||""}</td>
+        <td>${swapInfo.moveOwners[4]||""}</td>
+      </tr>
+    `;
+  });
+
+  tableHtml += `</tbody></table>`;
+  document.getElementById("swapResult").innerHTML=tableHtml;
+});
+
+// プレイヤー検索タブ用
+document.getElementById("searchPlayerBtn").addEventListener("click", function() {
+  const nameInput = document.getElementById("playerNameInput").value.trim().toLowerCase();
+
+  if (!nameInput) {
+    alert("プレイヤー名を入力してください");
+    return;
+  }
+
+  const candidates = playerIndex[nameInput];
+  if (!candidates) {
+    alert("該当プレイヤーが見つかりません");
+    return;
+  }
+
+  let pid;
+  if (candidates.length > 1) {
+    let choiceMsg = "複数の候補が見つかりました:\n";
+    candidates.forEach((id, i) => {
+      const p = allPlayers[id];
+      choiceMsg += `${i + 1}: ${p.surname} ${p.name} (id=${id})\n`;
+    });
+    const sel = prompt(choiceMsg + "番号を入力してください");
+    const index = parseInt(sel) - 1;
+    if (isNaN(index) || index < 0 || index >= candidates.length) {
+      alert("無効な選択です");
+      return;
+    }
+    pid = candidates[index];
+  } else {
+    pid = candidates[0];
+  }
+
+  const nameObj = allPlayers[pid];
+  const nameDisplay = nameObj.surname + " " + nameObj.name;
+
+  // ここで filtered を作成（大会IDでフィルタせずプレイヤー全対局を取得）
+  const playerfiltered = allGames.filter(g => g.black === pid || g.white === pid);
+
+  if (playerfiltered.length === 0) {
+    alert("対局が見つかりません");
+    return;
+  }
+
+  // 統計計算
+  const s = {
+    blackWin: 0, whiteWin: 0,
+    blackLose: 0, whiteLose: 0,
+    blackWinMoves: 0, whiteWinMoves: 0,
+    blackLoseMoves: 0, whiteLoseMoves: 0,
+    blackDrawMoves: 0, whiteDrawMoves: 0,
+    drawCountBlack: 0, drawCountWhite: 0,
+    opening3Count: {},
+    secondDirect: 0,
+    secondIndirect: 0
+  };
+
+  playerfiltered.forEach(g => {
+    const movesCount = g.moves ? g.moves.split(/\s+/).length : 0;
+    const swapInfo = analyzeSwap(g);
+    const isBlack = g.black === pid;
+    const isWhite = g.white === pid;
+
+    if (isBlack && g.bresult === 1) { s.blackWin++; s.blackWinMoves += movesCount; }
+    if (isWhite && g.bresult === 0) { s.whiteWin++; s.whiteWinMoves += movesCount; }
+    if (isBlack && g.bresult === 0) { s.blackLose++; s.blackLoseMoves += movesCount; }
+    if (isWhite && g.bresult === 1) { s.whiteLose++; s.whiteLoseMoves += movesCount; }
+    if (isBlack && g.bresult === 0.5) { s.blackDrawMoves += movesCount; s.drawCountBlack++; }
+    if (isWhite && g.bresult === 0.5) { s.whiteDrawMoves += movesCount; s.drawCountWhite++; }
+
+    if (swapInfo.moveOwners.length >= 3 && swapInfo.moveOwners[2] === nameDisplay) {
+      const openingName = openingMap[g.opening] || g.opening;
+      s.opening3Count[openingName] = (s.opening3Count[openingName] || 0) + 1;
+    }
+
+    if (movesCount >= 2 && swapInfo.moveOwners[1] === nameDisplay) {
+      const secondMove = g.moves.split(/\s+/)[1];
+      const col = secondMove[0];
+      if (col === "h") s.secondDirect++;
+      else if (col === "i" || col === "g") s.secondIndirect++;
+    }
+  });
+
+  const opening3List = Object.entries(s.opening3Count)
+    .map(([k, v]) => `${k}(${v})`)
+    .join(", ");
+
+  document.getElementById("playerSearchResult").innerHTML = `
+    プレイヤー: ${nameDisplay} (id=${pid})<br>
+    黒勝ち: ${s.blackWin}<br>
+    白勝ち: ${s.whiteWin}<br>
+    黒負け: ${s.blackLose}<br>
+    白負け: ${s.whiteLose}<br>
+    黒勝ち平均手数: ${s.blackWin ? s.blackWinMoves / s.blackWin : "-"}<br>
+    白勝ち平均手数: ${s.whiteWin ? s.whiteWinMoves / s.whiteWin : "-"}<br>
+    黒負け平均手数: ${s.blackLose ? s.blackLoseMoves / s.blackLose : "-"}<br>
+    白負け平均手数: ${s.whiteLose ? s.whiteLoseMoves / s.whiteLose : "-"}<br>
+    黒番引き分け平均手数: ${s.drawCountBlack ? s.blackDrawMoves / s.drawCountBlack : "-"}<br>
+    白番引き分け平均手数: ${s.drawCountWhite ? s.whiteDrawMoves / s.drawCountWhite : "-"}<br>
+    3手目着手珠型（登場回数）: ${opening3List}<br>
+    2手目直接着手: ${s.secondDirect}<br>
+    2手目間接着手: ${s.secondIndirect}<br>
+  `;
+
+  // Top5Moves表示
+  // プレイヤー検索用タブで使う場合
+ renderTop5Moves(playerfiltered, "playerTop5MovesContainer");
+
+
+}); // ←ここでイベントリスナー終了
+
+
+
+
+  function openTab(tabId) {
+    document.querySelectorAll(".tab-content").forEach(div => div.style.display = "none");
+    document.getElementById(tabId).style.display = "block";
+  }
+const tbody2 = document.querySelector("#openingWinRateTable tbody");
+tbody2.innerHTML = "";
+
+console.log("openingWins", openingWins);
+console.log("tbody2", tbody2);
+
+</script>
+</body>
+</html>
