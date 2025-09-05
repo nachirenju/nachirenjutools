@@ -18,6 +18,7 @@
 
 <!-- 使い方リンク -->
 <a href="#" id="showHelp">使い方</a>
+<a href="#" id="historyLink">更新履歴</a>
 
 <!-- モーダル用のコンテナ -->
 <div id="helpModal" style="display:none; position:fixed; top:10%; left:10%; width:80%; max-height:80%; overflow:auto; background:white; border:2px solid black; padding:1em; z-index:1000;">
@@ -58,6 +59,11 @@
   <button id="closeHelp">閉じる</button>
 </div>
 
+<div id="historyContent" style="display:none; border:1px solid #ccc; padding:10px; margin-top:5px;">
+    <button id="closeHistory" style="float:right;">閉じる</button>
+  〇2025/09/06 大会集計欄クリアボタンを設置、検索候補をidが大きい方から出るように変更、検索候補非表示件数を表示
+</div>
+
 
 <input type="text" id="keyword" placeholder="キーワードで検索">
 
@@ -87,6 +93,7 @@
 
 <input type="text" id="tournamentId" placeholder="大会IDを入力">
 <button id="analyzeBtn">大会集計</button>
+<button id="clearBtn">大会集計欄をクリア</button>
 
 <h2>大会勝敗統計</h2>
 <div id="stats"></div>
@@ -264,6 +271,13 @@ allGames = Array.from(games).map(g => {
     helpModal.style.display = "none";
   });
 
+  // 更新履歴リンク
+document.getElementById("historyLink").addEventListener("click", (e) => {
+  e.preventDefault();
+  const c = document.getElementById("historyContent");
+  c.style.display = (c.style.display === "none") ? "block" : "none";
+});
+
 function analyzeTaraguchi(g){
   const swapRaw = g.swap || "";
   const swapForCalc = swapRaw.replace(/R/g,"+").padEnd(5,"-");
@@ -282,6 +296,11 @@ function analyzeTaraguchi(g){
   }
   return { moveOwners, swap: swapRaw }; // 表示用には元データを返す
 }
+
+// 更新履歴閉じる
+document.getElementById("closeHistory").addEventListener("click", () => {
+  document.getElementById("historyContent").style.display = "none";
+});
 
 function analyzeSoosrv(g) {
   const swapRaw = (g.swap || "--").replace(/R/g, "+").padEnd(2, "-");
@@ -357,6 +376,10 @@ function analyzeRIF(g) {
 
   return { moveOwners, blackMoves, whiteMoves, swap: swapRaw };
 }
+
+document.getElementById("clearBtn").addEventListener("click", () => {
+  document.getElementById("tournamentId").value = "";
+});
 
 
 // swap解析
@@ -684,14 +707,16 @@ function showNextBatch(existingIds = []) {
   displayedCount += nextBatch.length;
 
   let moreBtn = document.getElementById("moreBtn");
-  if (displayedCount < currentMatches.length) {
+  const remaining = currentMatches.length - displayedCount; // 残り件数
+
+  if (remaining > 0) {
     if (!moreBtn) {
       moreBtn = document.createElement("button");
       moreBtn.id = "moreBtn";
-      moreBtn.textContent = "もっと見る";
       moreBtn.addEventListener("click", () => showNextBatch(existingIds));
       suggestionsDiv.appendChild(moreBtn);
     }
+    moreBtn.textContent = `もっと見る (残り ${remaining} 件)`;
   } else if (moreBtn) {
     moreBtn.remove();
   }
@@ -708,14 +733,12 @@ function updateTournamentIds() {
                           .map(cb => cb.value);
 
   const newIdsSet = new Set([
-    ...existingIds.filter(id => !currentMatches.some(c => c.id === id)),
+    ...existingIds.filter(id => !currentMatches.some(c => String(c.id) === id)),
     ...checkedIds
   ]);
 
   inputEl.value = Array.from(newIdsSet).join(",");
 }
-
-
 
 document.addEventListener("DOMContentLoaded", () => {
   document.getElementById("keyword").addEventListener("input", runSearch);
@@ -729,8 +752,6 @@ document.addEventListener("DOMContentLoaded", () => {
     cb.addEventListener("change", runSearch);
   });
 });
-
-
 
 function runSearch() {
   const keywordInput = document.getElementById("keyword");
@@ -753,54 +774,48 @@ function runSearch() {
   const partialMatch = document.getElementById("matchPartial")?.checked;
   const startMatch   = document.getElementById("matchStart")?.checked;
   const yearFrom = parseInt(document.getElementById("yearFrom")?.value) || null;
-const yearTo   = parseInt(document.getElementById("yearTo")?.value) || null;
-const ruleFilter = document.getElementById("ruleSelect")?.value || "";
+  const yearTo   = parseInt(document.getElementById("yearTo")?.value) || null;
+  const ruleFilter = document.getElementById("ruleSelect")?.value || "";
 
   suggestionsDiv.innerHTML = "";
   displayedCount = 0;
 
-const selectedRules = Array.from(document.querySelectorAll(".ruleCheckbox:checked"))
-                           .map(cb => parseInt(cb.value, 10)); // 数値化
+  const selectedRules = Array.from(document.querySelectorAll(".ruleCheckbox:checked"))
+                             .map(cb => parseInt(cb.value, 10)); // 数値化
 
+  currentMatches = allTournaments.filter(t => {
+    const name = t.name.toLowerCase();
+    const kw = keyword.toLowerCase();
+    const ruleId = parseInt(t.rule, 10);
 
+    // ルールチェック
+    if (selectedRules.length > 0 && !selectedRules.includes(ruleId)) return false;
 
-currentMatches = allTournaments.filter(t => {
-  const name = t.name.toLowerCase();
-  const kw = keyword.toLowerCase();
-  // ルールチェック
-const ruleId = parseInt(t.rule, 10);  // 数値化
-if (selectedRules.length > 0 && !selectedRules.includes(ruleId)) return false;
-
-
-  console.log(t.name, t.rule, selectedRules.includes(t.rule));
-
-
-  // 1. キーワード検索
-  let nameMatch = false;
-  if (matchType === "regex") {
-    try {
-      nameMatch = new RegExp(keyword, "i").test(t.name);
-    } catch (e) {
-      console.error("無効な正規表現です:", e);
-      suggestionsDiv.innerHTML = "無効な正規表現です";
-      return false;
+    // 1. キーワード検索
+    let nameMatch = false;
+    if (matchType === "regex") {
+      try {
+        nameMatch = new RegExp(keyword, "i").test(t.name);
+      } catch (e) {
+        console.error("無効な正規表現です:", e);
+        suggestionsDiv.innerHTML = "無効な正規表現です";
+        return false;
+      }
+    } else {
+      if (startMatch && name.startsWith(kw)) nameMatch = true;
+      else if (partialMatch && name.includes(kw)) nameMatch = true;
     }
-  } else {
-    if (startMatch && name.startsWith(kw)) nameMatch = true;
-    else if (partialMatch && name.includes(kw)) nameMatch = true;
-  }
-  if (!nameMatch) return false;
+    if (!nameMatch) return false;
 
-  // 2. 年の範囲
-  const year = parseInt(t.year);
-  if ((yearFrom && year < yearFrom) || (yearTo && year > yearTo)) return false;
+    // 2. 年の範囲
+    const year = parseInt(t.year);
+    if ((yearFrom && year < yearFrom) || (yearTo && year > yearTo)) return false;
 
-  // 3. ルールのチェックボックス
-  if (selectedRules.length > 0 && !selectedRules.includes(t.rule)) return false;
+    return true;
+  });
 
-  return true;
-});
-
+  // ★ IDの降順で並べ替え
+  currentMatches.sort((a, b) => parseInt(b.id, 10) - parseInt(a.id, 10));
 
   // 現在入力済みIDを保持
   const existingIds = tournamentInput.value
@@ -810,6 +825,7 @@ if (selectedRules.length > 0 && !selectedRules.includes(ruleId)) return false;
 
   showNextBatch(existingIds);
 }
+
 
 
 
