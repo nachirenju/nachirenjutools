@@ -61,7 +61,7 @@
 
 <div id="historyContent" style="display:none; border:1px solid #ccc; padding:10px; margin-top:5px;">
     <button id="closeHistory" style="float:right;">閉じる</button>
-  〇2025/09/06 大会集計欄クリアボタンを設置、検索候補をidが大きい方から出るように変更、検索候補非表示件数を表示
+  〇2025/09/06 大会集計欄クリアボタンを設置、検索候補をidが大きい方から出るように変更、検索候補非表示件数を表示、プレイヤー別集計に文字色を付加
 </div>
 
 
@@ -1145,7 +1145,7 @@ document.getElementById("analyzePlayerBtn").addEventListener("click", function()
 
       const div = document.createElement("div");
 
-      // 累計勝敗テーブル
+      // 累計勝敗テーブル（文字色追加）
       const summaryTable = document.createElement("table");
       summaryTable.border = "1";
       summaryTable.style.borderCollapse = "collapse";
@@ -1157,7 +1157,12 @@ document.getElementById("analyzePlayerBtn").addEventListener("click", function()
         </thead>
         <tbody>
           <tr>
-            <td>勝ち: ${totalWin} / 負け: ${totalLose} / 引き分け: ${totalDraw} （合計 ${totalGames}局）</td>
+            <td>
+              <span style="color:green">勝ち: ${totalWin}</span> /
+              <span style="color:red">負け: ${totalLose}</span> /
+              <span style="color:blue">引き分け: ${totalDraw}</span>
+              （合計 ${totalGames}局）
+            </td>
           </tr>
         </tbody>
       `;
@@ -1194,7 +1199,7 @@ document.getElementById("analyzePlayerBtn").addEventListener("click", function()
       `;
       div.appendChild(statsDiv);
 
-      // 対局一覧
+      // 対局一覧（文字色追加）
       const table = document.createElement("table");
       table.border = "1";
       table.style.borderCollapse = "collapse";
@@ -1220,15 +1225,16 @@ document.getElementById("analyzePlayerBtn").addEventListener("click", function()
         const result = g.bresult===1 ? "黒勝ち" : g.bresult===0 ? "白勝ち" : "引き分け";
 
         let playerRecord = "";
-        if (g.bresult===0.5) playerRecord="引き分け";
-        else if ((g.black===pid && g.bresult===1) || (g.white===pid && g.bresult===0)) playerRecord="勝ち";
-        else playerRecord="負け";
+        let color = "";
+        if (g.bresult===0.5) { playerRecord="引き分け"; color="blue"; }
+        else if ((g.black===pid && g.bresult===1) || (g.white===pid && g.bresult===0)) { playerRecord="勝ち"; color="green"; }
+        else { playerRecord="負け"; color="red"; }
 
         tr.innerHTML = `
           <td><a href="${url}" target="_blank">${g.id}</a></td>
           <td>${players}</td>
           <td>${result}</td>
-          <td>${playerRecord}</td>
+          <td><span style="color:${color}">${playerRecord}</span></td>
         `;
         tbody.appendChild(tr);
       });
@@ -1244,6 +1250,7 @@ document.getElementById("analyzePlayerBtn").addEventListener("click", function()
     renderTop5Moves(games, "tournamentplayerTop5MovesContainer", pids);
   }
 });
+
 
 
 
