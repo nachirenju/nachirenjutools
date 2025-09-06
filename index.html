@@ -9,6 +9,7 @@
   table { border-collapse: collapse; margin-top: 10px; width: 900px; }
   th, td { border: 1px solid #ccc; padding: 5px; text-align: center; }
 </style>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 </head>
 <body>
 
@@ -61,7 +62,9 @@
 
 <div id="historyContent" style="display:none; border:1px solid #ccc; padding:10px; margin-top:5px;">
     <button id="closeHistory" style="float:right;">閉じる</button>
-  〇2025/09/06 大会集計欄クリアボタンを設置、検索候補をidが大きい方から出るように変更、検索候補非表示件数を表示
+  〇更新履歴
+<li>2025/09/06 大会集計欄クリアボタンを設置、検索候補をidが大きい方から出るように変更、検索候補非表示件数を表示</li>
+  <li>09/07 プレイヤー集計に画像として保存ボタンを追加</li>
 </div>
 
 
@@ -1135,55 +1138,53 @@ document.getElementById("analyzePlayerBtn").addEventListener("click", function()
       };
     });
 
-    // 表示
     container.innerHTML = "";
+
     Object.entries(statsByPlayer).forEach(([playerName, data]) => {
       const { s, totalWin, totalLose, totalDraw, totalGames, pid, opening3List,
               firstMoveWin, secondMoveWin, thirdMoveWin, fourthMoveWin, fifthMoveWin,
               combo34Win, combo35Win, combo45Win } = data;
+
       if (totalGames === 0) return;
 
       const div = document.createElement("div");
+      div.id = `playerStats_${pid}`;
+      div.style.border = "1px solid #ccc";
+      div.style.padding = "10px";
+      div.style.marginBottom = "20px";
 
-// 累計勝敗テーブル（文字色追加 + 比率表示 + 勝ち点表示）
-const totalPoints = totalWin + totalDraw*0.5;
-const pointsPct   = ((totalPoints / totalGames)*100).toFixed(1);
+      // Flex container
+      const flexContainer = document.createElement("div");
+      flexContainer.style.display = "flex";
+      flexContainer.style.flexWrap = "wrap";
+      flexContainer.style.gap = "20px";
+      div.appendChild(flexContainer);
 
-const summaryTable = document.createElement("table");
-summaryTable.border = "1";
-summaryTable.style.borderCollapse = "collapse";
-summaryTable.style.width = "45%";
-summaryTable.style.marginBottom = "1em";
+      // 累計勝敗テーブル
+      const summaryTable = document.createElement("table");
+      summaryTable.style.borderCollapse = "collapse";
+      summaryTable.style.width = "300px";
+      summaryTable.innerHTML = `
+        <thead>
+          <tr><th>${playerName}<BR>から見た累計勝敗</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>
+              <span style="color:green">勝ち: ${totalWin} (${((totalWin/totalGames)*100).toFixed(1)}%)</span> /<br>
+              <span style="color:red">負け: ${totalLose} (${((totalLose/totalGames)*100).toFixed(1)}%)</span> /<br>
+              <span style="color:blue">引き分け: ${totalDraw} (${((totalDraw/totalGames)*100).toFixed(1)}%)</span><br>
+              （合計 ${totalGames}局）<br>
+              <span style="color:purple">勝ち点: ${totalWin + totalDraw*0.5} (${(((totalWin + totalDraw*0.5)/totalGames)*100).toFixed(1)}%)</span>
+            </td>
+          </tr>
+        </tbody>
+      `;
+      flexContainer.appendChild(summaryTable);
 
-const winPct  = ((totalWin / totalGames)*100).toFixed(1);
-const losePct = ((totalLose / totalGames)*100).toFixed(1);
-const drawPct = ((totalDraw / totalGames)*100).toFixed(1);
-
-summaryTable.innerHTML = `
-  <thead>
-    <tr><th>${playerName}から見た累計勝敗</th></tr>
-  </thead>
-  <tbody>
-    <tr>
-      <td>
-        <span style="color:green">勝ち: ${totalWin} (${winPct}%)</span> /
-        <span style="color:red">負け: ${totalLose} (${losePct}%)</span> /
-        <span style="color:blue">引き分け: ${totalDraw} (${drawPct}%)</span>
-        （合計 ${totalGames}局）<br>
-        <span style="color:purple">勝ち点: ${totalPoints} (${pointsPct}%)</span>
-      </td>
-    </tr>
-  </tbody>
-`;
-div.appendChild(summaryTable);
-
-
-
-      // 統計情報
+      // 詳細統計
       const statsDiv = document.createElement("div");
-      statsDiv.style.float = "left";
-      statsDiv.style.width = "45%";
-      statsDiv.style.marginRight = "5%";
+      statsDiv.style.flex = "1 1 300px";
       statsDiv.innerHTML = `
         プレイヤー: ${playerName} (id=${pid})<br>
         黒勝ち: ${s.blackWin}<br>
@@ -1199,68 +1200,76 @@ div.appendChild(summaryTable);
         3手目着手珠型（登場回数）: ${opening3List}<br>
         2手目直接着手: ${s.secondDirect}<br>
         2手目間接着手: ${s.secondIndirect}<br>
-        1手目着手者勝利数: ${firstMoveWin} (${((firstMoveWin/totalWin)*100).toFixed(2)}%)<br>
-        2手目着手者勝利数: ${secondMoveWin} (${((secondMoveWin/totalWin)*100).toFixed(2)}%)<br>
-        3手目着手者勝利数: ${thirdMoveWin} (${((thirdMoveWin/totalWin)*100).toFixed(2)}%)<br>
-        4手目着手者勝利数: ${fourthMoveWin} (${((fourthMoveWin/totalWin)*100).toFixed(2)}%)<br>
-        5手目着手者勝利数: ${fifthMoveWin} (${((fifthMoveWin/totalWin)*100).toFixed(2)}%)<br>
-        3+4手目同一着手者勝利数: ${combo34Win} (${((combo34Win/totalWin)*100).toFixed(2)}%)<br>
-        3+5手目同一着手者勝利数: ${combo35Win} (${((combo35Win/totalWin)*100).toFixed(2)}%)<br>
-        4+5手目同一着手者勝利数: ${combo45Win} (${((combo45Win/totalWin)*100).toFixed(2)}%)<br>
+        1手目着手者勝利数: ${firstMoveWin} (${totalWin?((firstMoveWin/totalWin)*100).toFixed(2):"0.00"}%)<br>
+        2手目着手者勝利数: ${secondMoveWin} (${totalWin?((secondMoveWin/totalWin)*100).toFixed(2):"0.00"}%)<br>
+        3手目着手者勝利数: ${thirdMoveWin} (${totalWin?((thirdMoveWin/totalWin)*100).toFixed(2):"0.00"}%)<br>
+        4手目着手者勝利数: ${fourthMoveWin} (${totalWin?((fourthMoveWin/totalWin)*100).toFixed(2):"0.00"}%)<br>
+        5手目着手者勝利数: ${fifthMoveWin} (${totalWin?((fifthMoveWin/totalWin)*100).toFixed(2):"0.00"}%)<br>
+        3+4手目同一着手者勝利数: ${combo34Win} (${totalWin?((combo34Win/totalWin)*100).toFixed(2):"0.00"}%)<br>
+        3+5手目同一着手者勝利数: ${combo35Win} (${totalWin?((combo35Win/totalWin)*100).toFixed(2):"0.00"}%)<br>
+        4+5手目同一着手者勝利数: ${combo45Win} (${totalWin?((combo45Win/totalWin)*100).toFixed(2):"0.00"}%)<br>
       `;
-      div.appendChild(statsDiv);
+      flexContainer.appendChild(statsDiv);
 
-      // 対局一覧（文字色追加）
+      // 対局一覧テーブル
       const table = document.createElement("table");
-      table.border = "1";
       table.style.borderCollapse = "collapse";
-      table.style.width = "45%";
-      table.style.float = "left";
-
-      const thead = document.createElement("thead");
-      thead.innerHTML = `
-        <tr>
-          <th>リンク</th>
-          <th>対局者</th>
-          <th>結果</th>
-          <th>${playerName}から見た勝敗</th>
-        </tr>
+      table.style.width = "100%";
+      table.style.marginTop = "10px";
+      table.innerHTML = `
+        <thead>
+          <tr>
+            <th>リンク</th>
+            <th>対局者</th>
+            <th>結果</th>
+            <th>${playerName}から見た勝敗</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${games.filter(g => g.black===pid || g.white===pid).map(g=>{
+            const url = `https://www.renju.net/tournament/${g.tournament}/game/${g.id}/`;
+            const players = `${allPlayers[g.black].surname} ${allPlayers[g.black].name} vs ${allPlayers[g.white].surname} ${allPlayers[g.white].name}`;
+            const result = g.bresult===1 ? "黒勝ち" : g.bresult===0 ? "白勝ち" : "引き分け";
+            let playerRecord="", color="";
+            if (g.bresult===0.5) { playerRecord="引き分け"; color="blue"; }
+            else if ((g.black===pid && g.bresult===1) || (g.white===pid && g.bresult===0)) { playerRecord="勝ち"; color="green"; }
+            else { playerRecord="負け"; color="red"; }
+            return `<tr>
+              <td><a href="${url}" target="_blank">${g.id}</a></td>
+              <td>${players}</td>
+              <td>${result}</td>
+              <td><span style="color:${color}">${playerRecord}</span></td>
+            </tr>`;
+          }).join('')}
+        </tbody>
       `;
-      table.appendChild(thead);
-
-      const tbody = document.createElement("tbody");
-      games.filter(g => g.black===pid || g.white===pid).forEach(g => {
-        const tr = document.createElement("tr");
-        const url = `https://www.renju.net/tournament/${g.tournament}/game/${g.id}/`;
-        const players = `${allPlayers[g.black].surname} ${allPlayers[g.black].name} vs ${allPlayers[g.white].surname} ${allPlayers[g.white].name}`;
-        const result = g.bresult===1 ? "黒勝ち" : g.bresult===0 ? "白勝ち" : "引き分け";
-
-        let playerRecord = "";
-        let color = "";
-        if (g.bresult===0.5) { playerRecord="引き分け"; color="blue"; }
-        else if ((g.black===pid && g.bresult===1) || (g.white===pid && g.bresult===0)) { playerRecord="勝ち"; color="green"; }
-        else { playerRecord="負け"; color="red"; }
-
-        tr.innerHTML = `
-          <td><a href="${url}" target="_blank">${g.id}</a></td>
-          <td>${players}</td>
-          <td>${result}</td>
-          <td><span style="color:${color}">${playerRecord}</span></td>
-        `;
-        tbody.appendChild(tr);
-      });
-      table.appendChild(tbody);
       div.appendChild(table);
+
+      // 保存ボタン
+      const saveBtn = document.createElement("button");
+      saveBtn.textContent = playerName + " の結果を画像保存";
+      saveBtn.style.display = "block";
+      saveBtn.style.marginTop = "10px";
+      saveBtn.addEventListener("click", () => {
+        saveBtn.style.display = "none";
+
+        html2canvas(div, { scale: 2 }).then(canvas => {
+          const link = document.createElement("a");
+          link.download = playerName + "_stats.png";
+          link.href = canvas.toDataURL("image/png");
+          link.click();
+        });
+      });
+      div.appendChild(saveBtn);
+
       container.appendChild(div);
 
-      const clearDiv = document.createElement("div");
-      clearDiv.style.clear = "both";
-      container.appendChild(clearDiv);
+      renderTop5Moves(games, "tournamentplayerTop5MovesContainer", pids);
     });
-
-    renderTop5Moves(games, "tournamentplayerTop5MovesContainer", pids);
   }
 });
+
+
 
 
 
