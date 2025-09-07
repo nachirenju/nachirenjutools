@@ -9,6 +9,7 @@
   table { border-collapse: collapse; margin-top: 10px; width: 900px; }
   th, td { border: 1px solid #ccc; padding: 5px; text-align: center; }
 </style>
+<script src="https://cdn.jsdelivr.net/npm/xlsx/dist/xlsx.full.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 </head>
 <body>
@@ -64,7 +65,8 @@
     <button id="closeHistory" style="float:right;">閉じる</button>
   〇更新履歴
 <li>2025/09/06 大会集計欄クリアボタンを設置、検索候補をidが大きい方から出るように変更、検索候補非表示件数を表示</li>
-  <li>09/07 プレイヤー集計に画像として保存ボタンを追加</li>
+  <li>09/06 プレイヤー集計に画像として保存ボタンを追加</li>
+<li>09/06 プレイヤー集計に.xlsx出力ボタンを追加</li>
 </div>
 
 
@@ -1009,7 +1011,6 @@ document.addEventListener("DOMContentLoaded", () => {
 });
 
 // プレイヤー別集計
-// プレイヤー別集計
 document.getElementById("analyzePlayerBtn").addEventListener("click", function() {
   const container = document.getElementById("playerStats");
   container.innerHTML = "";
@@ -1245,6 +1246,27 @@ document.getElementById("analyzePlayerBtn").addEventListener("click", function()
       `;
       div.appendChild(table);
 
+      // Excel出力ボタン（必ず table 描画後）
+      const excelBtn = document.createElement("button");
+      excelBtn.textContent = playerName + " の結果をExcel保存";
+      excelBtn.style.display = "block";
+      excelBtn.style.marginTop = "10px";
+      excelBtn.addEventListener("click", () => {
+        const tables = div.querySelectorAll("table");
+        if (!tables.length) { alert("出力するテーブルがありません"); return; }
+
+        const wb = XLSX.utils.book_new();
+        tables.forEach((table, idx) => {
+          const ws = XLSX.utils.table_to_sheet(table);
+          if(!ws['!cols']) ws['!cols'] = [];
+          ws['!cols'][0] = { wch: 50 };
+          ws['!cols'][1] = { wch: 80 };
+          XLSX.utils.book_append_sheet(wb, ws, "Sheet" + (idx+1));
+        });
+        XLSX.writeFile(wb, playerName + "_stats.xlsx");
+      });
+      div.appendChild(excelBtn);
+
       // 保存ボタン
       const saveBtn = document.createElement("button");
       saveBtn.textContent = playerName + " の結果を画像保存";
@@ -1252,19 +1274,23 @@ document.getElementById("analyzePlayerBtn").addEventListener("click", function()
       saveBtn.style.marginTop = "10px";
       saveBtn.addEventListener("click", () => {
         saveBtn.style.display = "none";
-
+        excelBtn.style.display = "none";
         html2canvas(div, { scale: 2 }).then(canvas => {
           const link = document.createElement("a");
           link.download = playerName + "_stats.png";
           link.href = canvas.toDataURL("image/png");
           link.click();
+          setTimeout(() => {
+            saveBtn.style.display = "block";
+            excelBtn.style.display = "block";
+          }, 5000);
         });
       });
       div.appendChild(saveBtn);
 
       container.appendChild(div);
-
-      renderTop5Moves(games, "tournamentplayerTop5MovesContainer", pids);
+    // Top5Movesもここで呼ぶ
+      renderTop5Moves(games, "tournamentplayerTop5MovesContainer", [pid]);
     });
   }
 });
