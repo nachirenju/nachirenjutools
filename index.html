@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="ja">
 <head>
@@ -67,6 +68,7 @@
 <li>2025/09/06 大会集計欄クリアボタンを設置、検索候補をidが大きい方から出るように変更、検索候補非表示件数を表示</li>
   <li>09/06 プレイヤー集計に画像として保存ボタンを追加</li>
 <li>09/06 プレイヤー集計に.xlsx出力ボタンを追加</li>
+<li>09/12 プレイヤー集計の対局一覧に珠型表記。3手目着手の場合は黄文字表記</li>
 </div>
 
 
@@ -1218,31 +1220,46 @@ document.getElementById("analyzePlayerBtn").addEventListener("click", function()
       table.style.width = "100%";
       table.style.marginTop = "10px";
       table.innerHTML = `
-        <thead>
-          <tr>
-            <th>リンク</th>
-            <th>対局者</th>
-            <th>結果</th>
-            <th>${playerName}から見た勝敗</th>
-          </tr>
-        </thead>
-        <tbody>
-          ${games.filter(g => g.black===pid || g.white===pid).map(g=>{
-            const url = `https://www.renju.net/tournament/${g.tournament}/game/${g.id}/`;
-            const players = `${allPlayers[g.black].surname} ${allPlayers[g.black].name} vs ${allPlayers[g.white].surname} ${allPlayers[g.white].name}`;
-            const result = g.bresult===1 ? "黒勝ち" : g.bresult===0 ? "白勝ち" : "引き分け";
-            let playerRecord="", color="";
-            if (g.bresult===0.5) { playerRecord="引き分け"; color="blue"; }
-            else if ((g.black===pid && g.bresult===1) || (g.white===pid && g.bresult===0)) { playerRecord="勝ち"; color="green"; }
-            else { playerRecord="負け"; color="red"; }
-            return `<tr>
-              <td><a href="${url}" target="_blank">${g.id}</a></td>
-              <td>${players}</td>
-              <td>${result}</td>
-              <td><span style="color:${color}">${playerRecord}</span></td>
-            </tr>`;
-          }).join('')}
-        </tbody>
+  <thead>
+    <tr>
+      <th>リンク</th>
+      <th>珠型</th>
+      <th>対局者</th>
+      <th>結果</th>
+      <th>${playerName}から見た勝敗</th>
+    </tr>
+  </thead>
+  <tbody>
+    ${games.filter(g => g.black===pid || g.white===pid).map(g=>{
+      const url = `https://www.renju.net/tournament/${g.tournament}/game/${g.id}/`;
+      const players = `${allPlayers[g.black].surname} ${allPlayers[g.black].name} vs ${allPlayers[g.white].surname} ${allPlayers[g.white].name}`;
+      const result = g.bresult===1 ? "黒勝ち" : g.bresult===0 ? "白勝ち" : "引き分け";
+      const openingName = openingMap[g.opening] || g.opening; // ★追加
+
+      // ★ swapInfo から 3手目着手者を確認
+  const swapInfo = analyzeSwap(g);
+  const thirdMover = (swapInfo.moveOwners[2] || "").trim().toLowerCase();
+  const thisPlayer = playerName.trim().toLowerCase(); // ← 今表示しているプレイヤー名
+
+  // ★ このプレイヤーが3手目なら黄色
+  const openingHighlight = (thirdMover === thisPlayer)
+    ? " style='background-color:yellow;'" : "";
+
+  let playerRecord="", color="";
+  if (g.bresult===0.5) { playerRecord="引き分け"; color="blue"; }
+  else if ((g.black===pid && g.bresult===1) || (g.white===pid && g.bresult===0)) { playerRecord="勝ち"; color="green"; }
+  else { playerRecord="負け"; color="red"; }
+
+  return `<tr>
+    <td><a href="${url}" target="_blank">${g.id}</a></td>
+    <td${openingHighlight}>${openingName}</td>
+    <td>${players}</td>
+    <td>${result}</td>
+    <td><span style="color:${color}">${playerRecord}</span></td>
+  </tr>`;
+}).join('')}
+  </tbody>
+
       `;
       div.appendChild(table);
 
@@ -1267,26 +1284,41 @@ document.getElementById("analyzePlayerBtn").addEventListener("click", function()
       });
       div.appendChild(excelBtn);
 
-      // 保存ボタン
-      const saveBtn = document.createElement("button");
-      saveBtn.textContent = playerName + " の結果を画像保存";
+      // 保存ボタンと説明文用のコンテナ
+const saveContainer = document.createElement("div");
+saveContainer.style.display = "flex";
+saveContainer.style.alignItems = "center";
+saveContainer.style.gap = "10px"; // ボタンとの間隔
+
+// 保存ボタン
+const saveBtn = document.createElement("button");
+saveBtn.textContent = playerName + " の結果を画像保存";
+saveBtn.addEventListener("click", () => {
+  saveBtn.style.display = "none";
+  excelBtn.style.display = "none";
+  html2canvas(div, { scale: 2 }).then(canvas => {
+    const link = document.createElement("a");
+    link.download = playerName + "_stats.png";
+    link.href = canvas.toDataURL("image/png");
+    link.click();
+    setTimeout(() => {
       saveBtn.style.display = "block";
-      saveBtn.style.marginTop = "10px";
-      saveBtn.addEventListener("click", () => {
-        saveBtn.style.display = "none";
-        excelBtn.style.display = "none";
-        html2canvas(div, { scale: 2 }).then(canvas => {
-          const link = document.createElement("a");
-          link.download = playerName + "_stats.png";
-          link.href = canvas.toDataURL("image/png");
-          link.click();
-          setTimeout(() => {
-            saveBtn.style.display = "block";
-            excelBtn.style.display = "block";
-          }, 5000);
-        });
-      });
-      div.appendChild(saveBtn);
+      excelBtn.style.display = "block";
+    }, 5000);
+  });
+});
+saveContainer.appendChild(saveBtn);
+
+// 説明文（黄色ハイライトの意味）
+const note = document.createElement("span");
+note.textContent = "※珠型欄黄色は該当プレイヤーが3手目を着手した対局";
+note.style.fontSize = "20px";
+note.style.color = "gray";
+saveContainer.appendChild(note);
+
+// コンテナをdivに追加
+div.appendChild(saveContainer);
+
 
       container.appendChild(div);
     // Top5Movesもここで呼ぶ
