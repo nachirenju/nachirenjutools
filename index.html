@@ -69,6 +69,7 @@
   <li>09/06 プレイヤー集計に画像として保存ボタンを追加</li>
 <li>09/06 プレイヤー集計に.xlsx出力ボタンを追加</li>
 <li>09/12 プレイヤー集計の対局一覧に珠型表記。3手目着手の場合は黄文字表記</li>
+<li>09/12 プレイヤー集計にフルネームでの検索を追加、同姓、同名プレイヤー検索時チェックボックスを追加</li>
 </div>
 
 
@@ -126,6 +127,8 @@
 
 <h2>プレイヤー別集計</h2>
 <input type="text" id="playerInput" placeholder="プレイヤー名を入力">
+<div id="playerCandidates"></div> <!-- ←ここに候補を出す -->
+
 <button id="analyzePlayerBtn">集計</button>
 <div id="playerStats"></div>
 
@@ -182,27 +185,33 @@ document.getElementById("fileInput").addEventListener("change", function(e){
     const xmlDoc = parser.parseFromString(text, "text/xml");
 
     // プレイヤー情報の格納部分
-    allPlayers = {};
-    playerIndex = {};
-    const players = xmlDoc.getElementsByTagName("player");
+// プレイヤー情報の格納部分
+allPlayers = {};
+playerIndex = {};
+const players = xmlDoc.getElementsByTagName("player");
 
-    Array.from(players).forEach(p=>{
-      const id = p.getAttribute("id");
-      const name = p.getAttribute("name");
-      const surname = p.getAttribute("surname");
-      const native_name = p.getAttribute("native_name");
+Array.from(players).forEach(p=>{
+  const id = p.getAttribute("id");
+  const name = (p.getAttribute("name") || "").trim();
+  const surname = (p.getAttribute("surname") || "").trim();
+  const native_name = (p.getAttribute("native_name") || "").trim();
 
-      allPlayers[id] = {id,name,surname,native_name};
+  allPlayers[id] = {id,name,surname,native_name};
 
-      // 検索用
-      [name,surname,native_name].forEach(n=>{
-        if(n){
-          const key = n.toLowerCase();
-          if(!playerIndex[key]) playerIndex[key] = [];
-          playerIndex[key].push(id);
-        }
-      });
-    });
+  // 検索用キーを準備
+  const lowerName = name.toLowerCase();
+  const lowerSurname = surname.toLowerCase();
+  const lowerNative = native_name.toLowerCase();
+  const fullName = (surname && name) ? (surname + " " + name).toLowerCase() : "";
+
+  [lowerName, lowerSurname, lowerNative, fullName].forEach(key=>{
+    if(key){
+      if(!playerIndex[key]) playerIndex[key] = [];
+      playerIndex[key].push(id);
+    }
+  });
+});
+
 
   // 大会情報の格納部分
 tournamentMap = {}; // 初期化
@@ -1029,6 +1038,67 @@ document.getElementById("analyzePlayerBtn").addEventListener("click", function()
   }
 
   const tidArray = tidInput.split(",").map(s => s.trim()).filter(s => s).map(Number);
+
+  // 候補を表示するdivをクリア
+  const candidateDiv = document.getElementById("playerCandidates");
+  candidateDiv.innerHTML = "";
+
+  // 曖昧候補処理（複数入力対応）
+  let ambiguousFound = false;
+  const inputEl = document.getElementById("playerInput");
+  let currentInputs = inputEl.value.split(",").map(s => s.trim()).filter(s => s);
+
+  nameInputs.forEach(name => {
+    const candidates = playerIndex[name] || [];
+    if (candidates.length > 1) {
+      // 大会に参加しているものだけ抽出
+      const inTournament = candidates.filter(pid =>
+        allGames.some(g =>
+          tidArray.includes(Number(g.tournament)) &&
+          (g.black === pid || g.white === pid)
+        )
+      );
+      if (inTournament.length > 1) {
+        ambiguousFound = true;
+        // 曖昧入力を一旦削除
+        currentInputs = currentInputs.filter(n => n.toLowerCase() !== name);
+        // チェックボックスを作成
+        candidateDiv.innerHTML += `<p>候補 (${name}) を選択してください:</p>`;
+        inTournament.forEach(pid => {
+          const p = allPlayers[pid];
+          const fullName = `${p.surname} ${p.name}`.trim();
+          const cb = document.createElement("input");
+          cb.type = "checkbox";
+          cb.value = fullName;
+          cb.id = `candidate_${pid}`;
+          cb.addEventListener("change", function() {
+            let cur = inputEl.value.split(",").map(s => s.trim()).filter(s=>s);
+            if (this.checked) {
+              if (!cur.includes(fullName.toLowerCase())) {
+                cur.push(fullName);
+              }
+            } else {
+              cur = cur.filter(x => x.toLowerCase() !== fullName.toLowerCase());
+            }
+            inputEl.value = cur.join(", ");
+          });
+          const label = document.createElement("label");
+          label.htmlFor = cb.id;
+          label.textContent = fullName;
+          candidateDiv.appendChild(cb);
+          candidateDiv.appendChild(label);
+          candidateDiv.appendChild(document.createElement("br"));
+        });
+      }
+    }
+  });
+
+  if (ambiguousFound) {
+    // 曖昧名を削除した状態で更新
+    inputEl.value = currentInputs.join(", ");
+    return; // ユーザー選択待ち
+  }
+
   const selectedPids = nameInputs.flatMap(name => playerIndex[name] || []);
 
   if (!selectedPids.length) {
