@@ -28,7 +28,8 @@
   <h2>使い方</h2>
   <p>連珠のトーナメント集計ツールです。<a href="https://x.com/nachirenju">@nachirenju</a>が興味本位で知識0のところから製作した経緯上、ちゃんと動くか未知数です。<br>
 私自身の使用に問題はありませんでしたが、こちらを使用したことでいかなる問題が発生しても責任は負いかねます。<br>
-何かあればXアカウントのほうにご連絡ください。</p>
+何かあればXアカウントのほうにご連絡ください。
+このツールとは全く関係ないですが<a href="https://www.youtube.com/channel/UCfbgN9hrrh9fmFKs8gxln5g">youtubeチャンネル</a>を所有しています。こちらも応援していただけると幸いです。</p>
 
   <h3>〇基本的な使い方</h3>
   <ol>
@@ -38,6 +39,8 @@
     <li>入力後、「大会集計」ボタンを押すと基本データが出ます。</li>
 <li>現状、Soosrv-8,Taraguchi-10,Classic,Yamaguchi以外のトーナメントには未対応です。</li>
 (連珠の対局を検索する分にはほぼこの4つの開局規定さえ押さえれば困らないので当面更新予定なし)
+<li>プレイヤーで絞り込みは、入力したプレイヤーが参加した大会すべてがリストアップされ、他条件と連動します。
+※複数人入力の場合、入力したプレイヤー全員が参加した大会のみがリストアップされます。(カンマ区切り）
   </ol>
 
   <h3>〇データについて</h3>
@@ -69,7 +72,7 @@
   <li>09/06 プレイヤー集計に画像として保存ボタンを追加</li>
 <li>09/06 プレイヤー集計に.xlsx出力ボタンを追加</li>
 <li>09/12 プレイヤー集計の対局一覧に珠型表記。3手目着手の場合は黄文字表記</li>
-<li>09/12 プレイヤー集計にフルネームでの検索を追加、同姓、同名プレイヤー検索時チェックボックスを追加</li>
+<li>09/12 大会IDのキーワード検索にプレイヤーで絞り込みを追加、スワップ履歴検索をわかりやすく
 </div>
 
 
@@ -91,6 +94,16 @@
 <label><input type="checkbox" class="ruleCheckbox" value="25" checked> Taraguchi-10</label>
 <label><input type="checkbox" class="ruleCheckbox" value="1"  checked> Classic</label>
 <label><input type="checkbox" class="ruleCheckbox" value="5"  checked> Yamaguchi</label>
+
+<!-- 大会検索側 -->
+<!-- 大会検索側 -->
+<label>
+  <input type="checkbox" id="enablePlayerFilter"> プレイヤーで絞り込み
+</label>
+<input type="text" id="searchPlayerInput" placeholder="プレイヤー名を入力" style="display:none;">
+<button id="searchPlayerCandidatesBtn" style="display:none;">該当プレイヤーを検索</button>
+<div id="searchPlayerCandidates"></div>
+
 
 
 
@@ -146,10 +159,11 @@
 
 <script>
 let allGames = [];
-let allTournaments = [];  // 大会一覧（検索用）
+let allTournaments = [];
 let allPlayers = {};
 let playerIndex = {};
-let tournamentMap = {}; // ←追加
+let tournamentMap = {};
+let tournamentPlayers = {};   // ★グローバルで宣言
 
 
 // opening固定定義
@@ -162,7 +176,8 @@ const openingMap = {
 };
 
 
-  window.addEventListener("DOMContentLoaded", () => {
+/*
+window.addEventListener("DOMContentLoaded", () => {
     // ここに処理を書く
     document.getElementById("tournamentTabBtn").addEventListener("click", () => openTab('tournamentTab'));
     document.getElementById("playerTabBtn").addEventListener("click", () => openTab('playerTab'));
@@ -170,7 +185,9 @@ const openingMap = {
     document.getElementById("searchPlayerBtn").addEventListener("click", () => {
         // プレイヤー検索処理
     });
-}); // ← ここが "}" と ")" の組み合わせ
+}); 
+*/
+
 
 
 
@@ -256,7 +273,7 @@ allGames = Array.from(games).map(g => {
     id: g.getAttribute("id"),
     tournament: tid,
     tournamentName: tInfo.name || `大会ID ${tid}`,
-    rule: tInfo.rule || 0,   // ←追加
+    rule: tInfo.rule || 0,
     bresult: parseFloat(g.getAttribute("bresult")),
     opening: g.getAttribute("opening"),
     black: g.getAttribute("black"),
@@ -266,10 +283,18 @@ allGames = Array.from(games).map(g => {
   };
 });
 
+// ★ここで大会ごとの参加プレイヤー集合を構築
+tournamentPlayers = {};
+allGames.forEach(g => {
+  if (!tournamentPlayers[g.tournament]) {
+    tournamentPlayers[g.tournament] = new Set();
+  }
+  tournamentPlayers[g.tournament].add(g.black);
+  tournamentPlayers[g.tournament].add(g.white);
+});
 
+alert(`読み込み完了: ${allGames.length} 対局`);
 
-
-    alert(`読み込み完了: ${allGames.length} 対局`);
   };
   reader.readAsText(file);
 });
@@ -701,6 +726,42 @@ let displayedCount = 0;  // 今表示している件数
 
 function showNextBatch(existingIds = []) {
   const suggestionsDiv = document.getElementById("suggestions");
+
+  // 最初の表示時に「全てチェック」「全て解除」ボタンを追加
+  if (displayedCount === 0) {
+    suggestionsDiv.innerHTML = ""; // 前の内容をリセット
+    const controlsDiv = document.createElement("div");
+    controlsDiv.style.marginBottom = "5px";
+
+    const checkAllBtn = document.createElement("button");
+    checkAllBtn.textContent = "全てチェック";
+    checkAllBtn.addEventListener("click", () => {
+      // tournamentId に全IDを反映
+      const allIds = currentMatches.map(g => g.id);
+      document.getElementById("tournamentId").value = allIds.join(",");
+      // 表示されている分はUIも同期
+      document.querySelectorAll("#suggestions input[type=checkbox]").forEach(cb => {
+        cb.checked = true;
+      });
+    });
+
+    const uncheckAllBtn = document.createElement("button");
+    uncheckAllBtn.textContent = "全て解除";
+    uncheckAllBtn.style.marginLeft = "5px";
+    uncheckAllBtn.addEventListener("click", () => {
+      // tournamentId を空にする
+      document.getElementById("tournamentId").value = "";
+      // 表示されている分はUIも同期
+      document.querySelectorAll("#suggestions input[type=checkbox]").forEach(cb => {
+        cb.checked = false;
+      });
+    });
+
+    controlsDiv.appendChild(checkAllBtn);
+    controlsDiv.appendChild(uncheckAllBtn);
+    suggestionsDiv.appendChild(controlsDiv);
+  }
+
   const nextBatch = currentMatches.slice(displayedCount, displayedCount + 10);
 
   nextBatch.forEach(g => {
@@ -738,6 +799,9 @@ function showNextBatch(existingIds = []) {
   }
 }
 
+
+
+
 function updateTournamentIds() {
   const inputEl = document.getElementById("tournamentId");
   const existingIds = inputEl.value
@@ -757,22 +821,101 @@ function updateTournamentIds() {
 }
 
 document.addEventListener("DOMContentLoaded", () => {
+  // キーワード入力
   document.getElementById("keyword").addEventListener("input", runSearch);
 
+  // マッチタイプ変更
   document.querySelectorAll('input[name="matchType"]').forEach(rb => {
-    rb.addEventListener("change", runSearch);
+    rb.addEventListener("input", runSearch);
   });
 
-  // チェックボックスの内容を反映
+  // ルールチェックボックス変更
   document.querySelectorAll('.ruleCheckbox').forEach(cb => {
     cb.addEventListener("change", runSearch);
   });
+
+  // プレイヤーフィルタのON/OFF（大会検索用）
+  document.getElementById("enablePlayerFilter").addEventListener("change", function() {
+    const playerInput = document.getElementById("searchPlayerInput");
+    const searchBtn   = document.getElementById("searchPlayerCandidatesBtn");
+    if (this.checked) {
+      playerInput.style.display = "inline-block";
+      searchBtn.style.display   = "inline-block";
+    } else {
+      playerInput.style.display = "none";
+      searchBtn.style.display   = "none";
+      playerInput.value = ""; // 入力クリア
+      document.getElementById("searchPlayerCandidates").innerHTML = ""; // 候補消す
+      runSearch(); // 再検索
+    }
+  });
+
+
+
+// 候補検索ボタン押下時（大会検索用）
+document.getElementById("searchPlayerCandidatesBtn").addEventListener("click", () => {
+  const nameInputs = document.getElementById("searchPlayerInput").value
+    .split(",")
+    .map(s => s.trim().toLowerCase())
+    .filter(s => s);
+
+  const candidateDiv = document.getElementById("searchPlayerCandidates");
+  candidateDiv.innerHTML = "";
+
+  let inputEl = document.getElementById("searchPlayerInput");
+  let currentInputs = inputEl.value.split(",").map(s => s.trim()).filter(s => s);
+
+  nameInputs.forEach(name => {
+    const candidates = playerIndex[name] || [];
+    if (candidates.length > 0) {
+      candidateDiv.innerHTML += `<p>候補 (${name}) を選択してください:</p>`;
+      candidates.forEach(pid => {
+        const p = allPlayers[pid];
+        const fullName = `${p.surname} ${p.name}`.trim();
+
+        const cb = document.createElement("input");
+        cb.type = "checkbox";
+        cb.value = fullName;
+        cb.id = `candidate_search_${pid}`;
+        cb.addEventListener("change", function() {
+          let cur = inputEl.value.split(",").map(s => s.trim()).filter(s => s);
+
+          // ★ まず曖昧入力を削除
+          cur = cur.filter(x => x.toLowerCase() !== name);
+
+          if (this.checked) {
+            if (!cur.includes(fullName.toLowerCase())) {
+              cur.push(fullName.toLowerCase());
+            }
+          } else {
+            cur = cur.filter(x => x.toLowerCase() !== fullName.toLowerCase());
+          }
+
+          inputEl.value = cur.join(", ");
+          runSearch(); // 選択した時点で検索更新
+        });
+
+        const label = document.createElement("label");
+        label.htmlFor = cb.id;
+        label.textContent = fullName;
+        candidateDiv.appendChild(cb);
+        candidateDiv.appendChild(label);
+        candidateDiv.appendChild(document.createElement("br"));
+      });
+    }
+  });
+
+  // 曖昧名はここで削除しておく
+  inputEl.value = currentInputs.join(", ");
 });
+
+
 
 function runSearch() {
   const keywordInput = document.getElementById("keyword");
   const tournamentInput = document.getElementById("tournamentId");
   const suggestionsDiv = document.getElementById("suggestions");
+  const candidateDiv = document.getElementById("searchPlayerCandidates");
 
   if (!keywordInput || !tournamentInput || !suggestionsDiv) {
     console.error("DOM要素が見つかりません");
@@ -780,7 +923,9 @@ function runSearch() {
   }
 
   const keyword = keywordInput.value.trim();
-  if (!keyword) {
+  const playerInput = document.getElementById("searchPlayerInput").value.trim().toLowerCase();
+
+  if (!keyword && !playerInput) {
     suggestionsDiv.innerHTML = "";
     displayedCount = 0;
     return;
@@ -791,14 +936,14 @@ function runSearch() {
   const startMatch   = document.getElementById("matchStart")?.checked;
   const yearFrom = parseInt(document.getElementById("yearFrom")?.value) || null;
   const yearTo   = parseInt(document.getElementById("yearTo")?.value) || null;
-  const ruleFilter = document.getElementById("ruleSelect")?.value || "";
 
   suggestionsDiv.innerHTML = "";
   displayedCount = 0;
 
   const selectedRules = Array.from(document.querySelectorAll(".ruleCheckbox:checked"))
-                             .map(cb => parseInt(cb.value, 10)); // 数値化
+                             .map(cb => parseInt(cb.value, 10));
 
+  // まずキーワード・ルール・年でフィルタ
   currentMatches = allTournaments.filter(t => {
     const name = t.name.toLowerCase();
     const kw = keyword.toLowerCase();
@@ -807,46 +952,64 @@ function runSearch() {
     // ルールチェック
     if (selectedRules.length > 0 && !selectedRules.includes(ruleId)) return false;
 
-    // 1. キーワード検索
-    let nameMatch = false;
-    if (matchType === "regex") {
-      try {
-        nameMatch = new RegExp(keyword, "i").test(t.name);
-      } catch (e) {
-        console.error("無効な正規表現です:", e);
-        suggestionsDiv.innerHTML = "無効な正規表現です";
-        return false;
+    // キーワード検索
+    let nameMatch = !keyword;
+    if (keyword) {
+      if (matchType === "regex") {
+        try {
+          nameMatch = new RegExp(keyword, "i").test(t.name);
+        } catch (e) {
+          console.error("無効な正規表現です:", e);
+          suggestionsDiv.innerHTML = "無効な正規表現です";
+          return false;
+        }
+      } else {
+        if (startMatch && name.startsWith(kw)) nameMatch = true;
+        else if (partialMatch && name.includes(kw)) nameMatch = true;
       }
-    } else {
-      if (startMatch && name.startsWith(kw)) nameMatch = true;
-      else if (partialMatch && name.includes(kw)) nameMatch = true;
     }
     if (!nameMatch) return false;
 
-    // 2. 年の範囲
+    // 年の範囲
     const year = parseInt(t.year);
     if ((yearFrom && year < yearFrom) || (yearTo && year > yearTo)) return false;
 
     return true;
   });
 
-  // ★ IDの降順で並べ替え
+
+  // ★ プレイヤー条件
+  if (playerInput) {
+    let names = playerInput.split(",").map(s => s.trim()).filter(s => s);
+
+    // tournamentPlayers を利用して高速化
+    currentMatches = currentMatches.filter(t => {
+      const playersInTournament = tournamentPlayers[t.id] || new Set();
+
+      if (names.length > 1) {
+        return names.every(name => {
+          const pids = playerIndex[name] || [];
+          return pids.some(pid => playersInTournament.has(pid));
+        });
+      } else {
+        const pids = playerIndex[names[0]] || [];
+        return pids.some(pid => playersInTournament.has(pid));
+      }
+    });
+  }
+
   currentMatches.sort((a, b) => parseInt(b.id, 10) - parseInt(a.id, 10));
 
-  // 現在入力済みIDを保持
   const existingIds = tournamentInput.value
-                        .split(",")
-                        .map(s => s.trim())
-                        .filter(s => s);
+                      .split(",")
+                      .map(s => s.trim())
+                      .filter(s => s);
 
   showNextBatch(existingIds);
 }
 
 
-
-
-
-
+});
 
 document.addEventListener("DOMContentLoaded", () => {
   const analyzeBtn = document.getElementById("analyzeBtn");
@@ -1397,48 +1560,77 @@ div.appendChild(saveContainer);
   }
 });
 
+// スワップ履歴検索（新方式）
+document.getElementById("searchSwapBtn").addEventListener("click", function () {
+  const inputEl = document.getElementById("swapPlayerInput");
+  const nameInput = inputEl.value.trim().toLowerCase();
+  const tid = document.getElementById("tournamentId").value.trim();
 
-
-
-
-
-
-
-
-// スワップ履歴検索（修正版）
-document.getElementById("searchSwapBtn").addEventListener("click",function(){
-  const nameInput=document.getElementById("swapPlayerInput").value.trim().toLowerCase();
-  const tid=document.getElementById("tournamentId").value.trim();
-  if(!nameInput||!tid){ alert("プレイヤー名と大会IDを入力してください"); return; }
-
-   const tidArray = tid.split(",").map(s => s.trim()).filter(s => s).map(Number);
-
-  const candidates = playerIndex[nameInput];
-  if(!candidates){ alert("該当プレイヤーが見つかりません"); return; }
-
-  let pid;
-  if(candidates.length > 1){
-    let choiceMsg = "複数の候補が見つかりました:\n";
-    candidates.forEach((id,i)=>{
-      const p = allPlayers[id];
-      choiceMsg += `${i+1}: ${p.surname} ${p.name} (id=${id})\n`;
-    });
-    const sel = prompt(choiceMsg + "番号を入力してください");
-    const index = parseInt(sel)-1;
-    if(isNaN(index) || index<0 || index>=candidates.length){ 
-      alert("無効な選択です"); return; 
-    }
-    pid = candidates[index];
-  } else {
-    pid = candidates[0];
+  if (!nameInput || !tid) {
+    alert("プレイヤー名と大会IDを入力してください");
+    return;
   }
 
-   const filteredmultiple = allGames.filter(
+  const tidArray = tid.split(",").map(s => s.trim()).filter(s => s).map(Number);
+
+  const candidates = playerIndex[nameInput] || [];
+  const candidateDiv = document.getElementById("swapResult");
+  candidateDiv.innerHTML = "";
+
+  if (candidates.length === 0) {
+    alert("該当プレイヤーが見つかりません");
+    return;
+  }
+
+  // 曖昧候補が複数 → チェックボックスで選択
+  if (candidates.length > 1) {
+    candidateDiv.innerHTML += `<p>候補 (${nameInput}) を選択してください:</p>`;
+    candidates.forEach(pid => {
+      const p = allPlayers[pid];
+      const fullName = `${p.surname} ${p.name}`.trim();
+
+      const cb = document.createElement("input");
+      cb.type = "checkbox";
+      cb.value = pid;
+      cb.id = `swap_candidate_${pid}`;
+      cb.addEventListener("change", function () {
+        if (this.checked) {
+          // この人だけ選択して検索実行
+          inputEl.value = fullName.toLowerCase();
+          runSwapSearch(pid, tidArray);
+        }
+      });
+
+      const label = document.createElement("label");
+      label.htmlFor = cb.id;
+      label.textContent = fullName;
+      candidateDiv.appendChild(cb);
+      candidateDiv.appendChild(label);
+      candidateDiv.appendChild(document.createElement("br"));
+    });
+    return; // ★ 選択待ち
+  }
+
+  // 一意ならそのまま検索
+  runSwapSearch(candidates[0], tidArray);
+});
+
+
+// 実際の検索処理
+function runSwapSearch(pid, tidArray) {
+  const filteredmultiple = allGames.filter(
     g => tidArray.includes(Number(g.tournament)) && (g.black === pid || g.white === pid)
   );
-  if(filteredmultiple.length===0){ alert("該当大会に対局なし"); return; }
 
-  // テーブル作成処理
+  if (filteredmultiple.length === 0) {
+    alert("該当大会に対局なし");
+    return;
+  }
+
+  // 検索対象プレイヤー名（小文字化して比較用）
+  const playerName = (allPlayers[pid].surname + " " + allPlayers[pid].name).trim().toLowerCase();
+
+  // テーブル作成
   let tableHtml = `
     <table border="1" style="border-collapse:collapse; margin-top:10px; width:100%;">
       <thead>
@@ -1457,161 +1649,62 @@ document.getElementById("searchSwapBtn").addEventListener("click",function(){
       <tbody>
   `;
 
-  filteredmultiple.forEach(g=>{
+  filteredmultiple.forEach(g => {
     const swapInfo = analyzeSwap(g);
     const moves = g.moves.split(/\s+/);
-    const second = moves[1]||"";
-    let type="";
-    if(second){
+    const second = moves[1] || "";
+    let type = "";
+    if (second) {
       const col = second[0];
-      if(col==="h") type="直接";
-      else if(col==="i"||col==="g") type="間接";
+      if (col === "h") type = "直接";
+      else if (col === "i" || col === "g") type = "間接";
     }
-    const url = `https://www.renju.net/tournament/${tid}/game/${g.id}/`;
+    const url = `https://www.renju.net/tournament/${g.tournament}/game/${g.id}/`;
     const openingName = openingMap[g.opening] || g.opening;
+
+    // ★ 3手目着手者が検索プレイヤーなら黄色ハイライト
+    const thirdMover = (swapInfo.moveOwners[2] || "").trim().toLowerCase();
+    const openingHighlight = (thirdMover === playerName)
+      ? " style='background-color:yellow;'" : "";
 
     tableHtml += `
       <tr>
         <td><a href="${url}" target="_blank">${g.id}</a></td>
-        <td>${openingName}</td>
+        <td${openingHighlight}>${openingName}</td>
         <td>${swapInfo.swap.replace(/R/g, "+")}</td>
         <td>${type}</td>
-        <td>${swapInfo.moveOwners[0]||""}</td>
-        <td>${swapInfo.moveOwners[1]||""}</td>
-        <td>${swapInfo.moveOwners[2]||""}</td>
-        <td>${swapInfo.moveOwners[3]||""}</td>
-        <td>${swapInfo.moveOwners[4]||""}</td>
+        <td>${swapInfo.moveOwners[0] || ""}</td>
+        <td>${swapInfo.moveOwners[1] || ""}</td>
+        <td>${swapInfo.moveOwners[2] || ""}</td>
+        <td>${swapInfo.moveOwners[3] || ""}</td>
+        <td>${swapInfo.moveOwners[4] || ""}</td>
       </tr>
     `;
   });
 
   tableHtml += `</tbody></table>`;
-  document.getElementById("swapResult").innerHTML=tableHtml;
-});
-
-// プレイヤー検索タブ用
-document.getElementById("searchPlayerBtn").addEventListener("click", function() {
-  const nameInput = document.getElementById("playerNameInput").value.trim().toLowerCase();
-
-  if (!nameInput) {
-    alert("プレイヤー名を入力してください");
-    return;
-  }
-
-  const candidates = playerIndex[nameInput];
-  if (!candidates) {
-    alert("該当プレイヤーが見つかりません");
-    return;
-  }
-
-  let pid;
-  if (candidates.length > 1) {
-    let choiceMsg = "複数の候補が見つかりました:\n";
-    candidates.forEach((id, i) => {
-      const p = allPlayers[id];
-      choiceMsg += `${i + 1}: ${p.surname} ${p.name} (id=${id})\n`;
-    });
-    const sel = prompt(choiceMsg + "番号を入力してください");
-    const index = parseInt(sel) - 1;
-    if (isNaN(index) || index < 0 || index >= candidates.length) {
-      alert("無効な選択です");
-      return;
-    }
-    pid = candidates[index];
-  } else {
-    pid = candidates[0];
-  }
-
-  const nameObj = allPlayers[pid];
-  const nameDisplay = nameObj.surname + " " + nameObj.name;
-
-  // ここで filtered を作成（大会IDでフィルタせずプレイヤー全対局を取得）
-  const playerfiltered = allGames.filter(g => g.black === pid || g.white === pid);
-
-  if (playerfiltered.length === 0) {
-    alert("対局が見つかりません");
-    return;
-  }
-
-  // 統計計算
-  const s = {
-    blackWin: 0, whiteWin: 0,
-    blackLose: 0, whiteLose: 0,
-    blackWinMoves: 0, whiteWinMoves: 0,
-    blackLoseMoves: 0, whiteLoseMoves: 0,
-    blackDrawMoves: 0, whiteDrawMoves: 0,
-    drawCountBlack: 0, drawCountWhite: 0,
-    opening3Count: {},
-    secondDirect: 0,
-    secondIndirect: 0
-  };
-
-  playerfiltered.forEach(g => {
-    const movesCount = g.moves ? g.moves.split(/\s+/).length : 0;
-    const swapInfo = analyzeSwap(g);
-    const isBlack = g.black === pid;
-    const isWhite = g.white === pid;
-
-    if (isBlack && g.bresult === 1) { s.blackWin++; s.blackWinMoves += movesCount; }
-    if (isWhite && g.bresult === 0) { s.whiteWin++; s.whiteWinMoves += movesCount; }
-    if (isBlack && g.bresult === 0) { s.blackLose++; s.blackLoseMoves += movesCount; }
-    if (isWhite && g.bresult === 1) { s.whiteLose++; s.whiteLoseMoves += movesCount; }
-    if (isBlack && g.bresult === 0.5) { s.blackDrawMoves += movesCount; s.drawCountBlack++; }
-    if (isWhite && g.bresult === 0.5) { s.whiteDrawMoves += movesCount; s.drawCountWhite++; }
-
-    if (swapInfo.moveOwners.length >= 3 && swapInfo.moveOwners[2] === nameDisplay) {
-      const openingName = openingMap[g.opening] || g.opening;
-      s.opening3Count[openingName] = (s.opening3Count[openingName] || 0) + 1;
-    }
-
-    if (movesCount >= 2 && swapInfo.moveOwners[1] === nameDisplay) {
-      const secondMove = g.moves.split(/\s+/)[1];
-      const col = secondMove[0];
-      if (col === "h") s.secondDirect++;
-      else if (col === "i" || col === "g") s.secondIndirect++;
-    }
-  });
-
-  const opening3List = Object.entries(s.opening3Count)
-    .map(([k, v]) => `${k}(${v})`)
-    .join(", ");
-
-  document.getElementById("playerSearchResult").innerHTML = `
-    プレイヤー: ${nameDisplay} (id=${pid})<br>
-    黒勝ち: ${s.blackWin}<br>
-    白勝ち: ${s.whiteWin}<br>
-    黒負け: ${s.blackLose}<br>
-    白負け: ${s.whiteLose}<br>
-    黒勝ち平均手数: ${s.blackWin ? s.blackWinMoves / s.blackWin : "-"}<br>
-    白勝ち平均手数: ${s.whiteWin ? s.whiteWinMoves / s.whiteWin : "-"}<br>
-    黒負け平均手数: ${s.blackLose ? s.blackLoseMoves / s.blackLose : "-"}<br>
-    白負け平均手数: ${s.whiteLose ? s.whiteLoseMoves / s.whiteLose : "-"}<br>
-    黒番引き分け平均手数: ${s.drawCountBlack ? s.blackDrawMoves / s.drawCountBlack : "-"}<br>
-    白番引き分け平均手数: ${s.drawCountWhite ? s.whiteDrawMoves / s.drawCountWhite : "-"}<br>
-    3手目着手珠型（登場回数）: ${opening3List}<br>
-    2手目直接着手: ${s.secondDirect}<br>
-    2手目間接着手: ${s.secondIndirect}<br>
-  `;
-
-  // Top5Moves表示
-  // プレイヤー検索用タブで使う場合
- renderTop5Moves(playerfiltered, "playerTop5MovesContainer");
-
-
-}); // ←ここでイベントリスナー終了
+  document.getElementById("swapResult").innerHTML = tableHtml;
+}
 
 
 
 
-  function openTab(tabId) {
-    document.querySelectorAll(".tab-content").forEach(div => div.style.display = "none");
-    document.getElementById(tabId).style.display = "block";
-  }
-const tbody2 = document.querySelector("#openingWinRateTable tbody");
-tbody2.innerHTML = "";
 
-console.log("openingWins", openingWins);
-console.log("tbody2", tbody2);
+
+
+
+
+
+
+
+
+function openTab(tabId) {
+  document.querySelectorAll(".tab-content").forEach(div => div.style.display = "none");
+  document.getElementById(tabId).style.display = "block";
+}
+
+
+
 
 </script>
 </body>
