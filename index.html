@@ -12,6 +12,8 @@
 </style>
 <script src="https://cdn.jsdelivr.net/npm/xlsx/dist/xlsx.full.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/gif.js.optimized/dist/gif.js"></script>
+
 </head>
 <body>
 
@@ -22,6 +24,7 @@
 <!-- 使い方リンク -->
 <a href="#" id="showHelp">使い方</a>
 <a href="#" id="historyLink">更新履歴</a>
+<a href="freeboard.html">連珠盤</a>
   <br>
 <a href="index.html">日本語</a> | 
 <a href="en.html">English</a> | 
@@ -80,6 +83,7 @@
 <li>09/12 プレイヤー集計の対局一覧に珠型表記。3手目着手の場合は黄文字表記</li>
 <li>09/12 大会IDのキーワード検索にプレイヤーで絞り込みを追加、スワップ履歴検索をわかりやすく
 <li>09/16 頻出棋譜リストにswap履歴を記載、珠型ごとの頻出棋譜を追加、swap履歴検索の同性同名時の処理を修正、珠型のswap履歴検索に対応</li>
+<li>09/25 対局のリンクに再現機能+GIF保存を追加</li>
 </div>
 
 
@@ -178,6 +182,59 @@
   <div id="openingTop10"></div>
 </div>
 
+<!-- 棋譜再現用モーダル -->
+<div id="gameModal" style="display:none; position:fixed; top:50%; left:50%;
+    transform:translate(-50%,-50%); background:white; padding:20px; border:2px solid black;
+    z-index:3000; max-width:90%; max-height:90%; overflow:auto;">
+  <button id="closeGameModal" style="float:right;">✖</button>
+  <div id="gameInfo"></div>
+  <div id="gameBoard"></div>
+<div style="margin-top:10px; text-align:center;">
+  <button id="firstMove">≪ 全て戻す</button>
+  <button id="prev5">← 5手戻す</button>
+  <button id="prevMove">← 前の手</button>
+  <button id="nextMove">次の手 →</button>
+  <button id="next5">5手進める →</button>
+  <button id="lastMove">全て進める ≫</button>
+  <br><button id="toggleMoveNumbers">石番号を非表示</button>
+<br>
+<!-- 盤面保存ボタン -->
+  <!-- モード選択 -->
+<div style="margin:10px 0;">
+  <label><input type="radio" name="pngMode" value="board" checked>盤面のみ</label>
+  <label><input type="radio" name="pngMode" value="withLabel">盤面＋座標</label>
+  <label><input type="radio" name="pngMode" value="full">盤面＋座標＋対局者＋swap</label>
+</div>
+<button id="saveBoardPng">PNGで保存</button>
+</div>
+<div id="currentKifu"
+     style="margin-top:10px; text-align:center; font-family:monospace;
+            font-size:14px; white-space:pre-wrap; word-wrap:break-word;
+            width:600px; margin-left:auto; margin-right:auto; border:1px solid #ccc; padding:5px;">
+  （棋譜がここに表示されます）
+</div>
+<div id="gifControls" style="margin-top:10px; text-align:center;">
+  <h3>GIF保存</h3>
+  開始手数: <input id="gifStartMove" type="number" value="0" min="0">
+  <label><input type="radio" name="gifMode" value="board" checked> 盤面のみ</label>
+  <label><input type="radio" name="gifMode" value="boardCoords"> 盤面＋座標</label>
+  <label><input type="radio" name="gifMode" value="full"> 盤面＋座標＋対局者情報</label>
+  <br>
+  <label>更新間隔（秒）:
+    <input type="number" id="gifInterval" value="1" step="0.1" style="width:60px;">
+  </label>
+<label>最終フレーム静止（秒）: <input id="gifLastDelay" type="number" value="3" step="0.1">
+</label>
+  <button id="saveGifBtn">GIF保存</button>
+</div>
+
+
+
+  </div>
+</div>
+
+<div id="gameModalOverlay" style="display:none; position:fixed; top:0; left:0;
+    width:100%; height:100%; background:rgba(0,0,0,0.5); z-index:2500;"></div>
 
 
 
@@ -771,9 +828,12 @@ gamesForThisKey.forEach(g => {
   const blackMovesText = blackMoves.length > 0 ? ` (${blackMoves.join(",")})` : "";
 
   li.innerHTML = `
-    <a href="${url}" target="_blank">${g.id}</a> (${openingLink}) - 
-    黒${blackMovesText}: ${blackName}, 白: ${whiteName} → ${resultText}
-  `;
+  <a href="#" class="game-popup-link" data-gameid="${g.id}">${g.id}</a>
+  (<a href="${url}" target="_blank">RIFリンク</a>)
+  (${openingLink}) - 
+  黒${blackMovesText}: ${blackName}, 白: ${whiteName} → ${resultText}
+`;
+
   ul.appendChild(li);
 });
 
@@ -784,6 +844,216 @@ container.appendChild(wrapper);
 
   });
 }
+
+let currentMoves = [];
+let currentIndex = 0;
+let currentGame = null;
+
+
+
+
+function showGamePopup(gameId){
+  const g = allGames.find(x => x.id === gameId);
+  if(!g) return;
+  currentGame = g; // ★追加
+
+  // 情報を上に表示
+  const blackName = allPlayers[g.black] ? allPlayers[g.black].surname + " " + allPlayers[g.black].name : g.black;
+  const whiteName = allPlayers[g.white] ? allPlayers[g.white].surname + " " + allPlayers[g.white].name : g.white;
+  const resultText = g.bresult == 1 ? "黒勝ち" : g.bresult == 0 ? "白勝ち" : "引き分け";
+
+  // ★ swap情報を surname だけで整形
+  const swapInfo = analyzeSwap(g);
+  const swapMoves = swapInfo.moveOwners.map((owner, idx) => {
+    if (!owner) return `${idx+1}手目:-`;
+    let surname = owner;
+    Object.values(allPlayers).forEach(p => {
+      const full = `${p.surname} ${p.name}`.trim();
+      if (full === owner) surname = p.surname; // surnameだけ抽出
+    });
+    return `${idx+1}手目:${surname}`;
+  }).join("　"); // 全角スペースで区切り
+
+  document.getElementById("gameInfo").innerHTML = `
+    <p><b>黒:</b> ${blackName}　<b>白:</b> ${whiteName}</p>
+    <p><b>結果:</b> ${resultText}</p>
+    <p><b>swap:</b> ${swapMoves}</p>
+  `;
+
+  // 棋譜配列
+  currentMoves = g.moves.split(/\s+/).filter(m=>m);
+  currentIndex = currentMoves.length; // ★ 初期表示を最終手まで
+
+  renderCurrentBoard();
+
+  document.getElementById("gameModal").style.display = "block";
+  document.getElementById("gameModalOverlay").style.display = "block";
+}
+
+
+function renderCurrentBoard() {
+  const container = document.getElementById("gameBoard");
+  container.innerHTML = "";
+
+  const shownMoves = currentMoves.slice(0, currentIndex);
+
+  // ★ mode を選択: 
+  //   "board"      → 盤面のみ
+  //   "withLabel"  → 座標つき
+  //   "full"       → 座標 + 対局者 + swap情報
+  const mode = "withLabel";
+
+  // ★ GIF側と同じ関数を使う
+  const canvas = renderBoardForGif(shownMoves, mode);
+  container.appendChild(canvas);
+
+  // ★ 棋譜テキストを表示
+  document.getElementById("currentKifu").textContent = shownMoves.join("");
+}
+
+
+
+function renderBoardForGif(moves, mode) {
+  const size = 15;
+  const cell = 30;
+  const marginLeft = 25;   // 左余白（数字）
+  const marginBottom = 20; // 下余白（アルファベット）
+  const marginTop = 20;    // 上余白を追加
+
+  const innerSize = (size - 1) * cell; // 内側の線が届く範囲 (420)
+  const boardSize = size * cell;       // 外枠のサイズ (450)
+
+  const canvasWidth  = marginLeft + boardSize;
+  const canvasHeight = marginTop + boardSize + marginBottom + (mode === "full" ? 60 : 0);
+
+  const canvas = document.createElement("canvas");
+  canvas.width = canvasWidth;
+  canvas.height = canvasHeight;
+  const ctx = canvas.getContext("2d");
+
+  // 背景
+  ctx.fillStyle = "#F9EBCF";
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+  // --- 内側の細線 ---
+  ctx.strokeStyle = "black";
+  ctx.lineWidth = 1;
+
+  for (let i = 1; i < size - 1; i++) {
+    const x = marginLeft + i * cell + 0.5;
+    ctx.beginPath();
+    ctx.moveTo(x, marginTop);
+    ctx.lineTo(x, marginTop + innerSize);
+    ctx.stroke();
+  }
+
+  for (let i = 1; i < size - 1; i++) {
+    const y = marginTop + i * cell + 0.5;
+    ctx.beginPath();
+    ctx.moveTo(marginLeft, y);
+    ctx.lineTo(marginLeft + innerSize, y);
+    ctx.stroke();
+  }
+
+  // --- 外枠 ---
+  ctx.lineWidth = 2;
+  ctx.strokeRect(marginLeft + 0.5, marginTop + 0.5, innerSize, innerSize);
+
+  // --- 座標ラベル ---
+  if (mode !== "board") {
+    const letters = "ABCDEFGHIJKLMNO".split("");
+    ctx.font = "bold 14px sans-serif";
+    ctx.fillStyle = "black";
+
+    // 下側 (A〜O)
+    ctx.textAlign = "center";
+    for (let i = 0; i < size; i++) {
+      ctx.fillText(letters[i], marginLeft + i * cell, marginTop + innerSize + 15);
+    }
+
+    // 左側 (15〜1)
+    ctx.textAlign = "right";
+    ctx.textBaseline = "alphabetic";
+  ctx.textAlign = "right";
+ctx.textBaseline = "alphabetic";
+for (let i = 0; i < size; i++) {
+  ctx.fillText(size - i, marginLeft - 5, marginTop + i * cell + cell / 2 - 10);
+}
+
+  }
+
+// --- 石 ---
+moves.forEach((m, i) => {
+  const { x, y } = coordToIndex(m);
+  const cx = marginLeft + x * cell;
+  const cy = marginTop + (size - 1 - y) * cell;
+
+  ctx.beginPath();
+  ctx.arc(cx, cy, 12, 0, Math.PI * 2);
+  ctx.fillStyle = i % 2 === 0 ? "black" : "white";
+  ctx.fill();
+  ctx.stroke();
+
+  if (showMoveNumbers) {  // ★ここで制御
+    ctx.fillStyle = i % 2 === 0 ? "white" : "black";
+    ctx.font = "bold 12px sans-serif";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText(i + 1, cx, cy);
+  }
+});
+
+
+// --- 対局者情報 ---
+if (mode === "full" && currentGame) {
+  ctx.fillStyle = "black";
+  ctx.font = "14px sans-serif";
+  ctx.textAlign = "left";
+
+  const blackSurname = allPlayers[currentGame.black]?.surname || currentGame.black;
+  const whiteSurname = allPlayers[currentGame.white]?.surname || currentGame.white;
+
+  ctx.fillText(`黒: ${blackSurname}`, 10, marginTop + innerSize + 35);
+  ctx.fillText(`白: ${whiteSurname}`, 10, marginTop + innerSize + 55);
+
+  // ★ swap情報を surname で整形して出力
+  const swapInfo = analyzeSwap(currentGame);
+  if (swapInfo && swapInfo.moveOwners) {
+    // surname に変換
+    const owners = swapInfo.moveOwners.map(owner => {
+      if (!owner) return "-";
+      let s = owner;
+      Object.values(allPlayers).forEach(p => {
+        const full = `${p.surname} ${p.name}`.trim();
+        if (full === owner) s = p.surname;
+      });
+      return s;
+    });
+
+    // 1〜5手目だけに制限
+    const firstLine = owners
+      .map((o, idx) => `${idx + 1}手目:${o}`)
+      .slice(0, 3) // 1〜3手目
+      .join("　"); // 全角スペースで区切り
+
+    const secondLine = owners
+      .map((o, idx) => `${idx + 1}手目:${o}`)
+      .slice(3, 5) // 4,5手目
+      .join("　");
+
+    ctx.fillText(`swap: ${firstLine}`, 10, marginTop + innerSize + 75);
+    ctx.fillText(`      ${secondLine}`, 10, marginTop + innerSize + 95);
+  }
+}
+
+
+  return canvas;
+}
+
+
+
+
+
 
 
 
@@ -1284,11 +1554,9 @@ document.getElementById("analyzePlayerBtn").addEventListener("click", function()
 
   const tidArray = tidInput.split(",").map(s => s.trim()).filter(s => s).map(Number);
 
-  // 候補を表示するdivをクリア
+  // 曖昧候補処理
   const candidateDiv = document.getElementById("playerCandidates");
   candidateDiv.innerHTML = "";
-
-  // 曖昧候補処理（複数入力対応）
   let ambiguousFound = false;
   const inputEl = document.getElementById("playerInput");
   let currentInputs = inputEl.value.split(",").map(s => s.trim()).filter(s => s);
@@ -1296,7 +1564,6 @@ document.getElementById("analyzePlayerBtn").addEventListener("click", function()
   nameInputs.forEach(name => {
     const candidates = playerIndex[name] || [];
     if (candidates.length > 1) {
-      // 大会に参加しているものだけ抽出
       const inTournament = candidates.filter(pid =>
         allGames.some(g =>
           tidArray.includes(Number(g.tournament)) &&
@@ -1305,9 +1572,7 @@ document.getElementById("analyzePlayerBtn").addEventListener("click", function()
       );
       if (inTournament.length > 1) {
         ambiguousFound = true;
-        // 曖昧入力を一旦削除
         currentInputs = currentInputs.filter(n => n.toLowerCase() !== name);
-        // チェックボックスを作成
         candidateDiv.innerHTML += `<p>候補 (${name}) を選択してください:</p>`;
         inTournament.forEach(pid => {
           const p = allPlayers[pid];
@@ -1319,9 +1584,7 @@ document.getElementById("analyzePlayerBtn").addEventListener("click", function()
           cb.addEventListener("change", function() {
             let cur = inputEl.value.split(",").map(s => s.trim()).filter(s=>s);
             if (this.checked) {
-              if (!cur.includes(fullName.toLowerCase())) {
-                cur.push(fullName);
-              }
+              if (!cur.includes(fullName.toLowerCase())) cur.push(fullName);
             } else {
               cur = cur.filter(x => x.toLowerCase() !== fullName.toLowerCase());
             }
@@ -1339,13 +1602,11 @@ document.getElementById("analyzePlayerBtn").addEventListener("click", function()
   });
 
   if (ambiguousFound) {
-    // 曖昧名を削除した状態で更新
     inputEl.value = currentInputs.join(", ");
     return; // ユーザー選択待ち
   }
 
   const selectedPids = nameInputs.flatMap(name => playerIndex[name] || []);
-
   if (!selectedPids.length) {
     alert("該当プレイヤーが見つかりません");
     return;
@@ -1357,12 +1618,11 @@ document.getElementById("analyzePlayerBtn").addEventListener("click", function()
     if (nameInputs.length === 1) {
       return selectedPids.some(pid => gamePlayers.includes(pid));
     } else {
-      for (let i = 0; i < selectedPids.length; i++) {
-        for (let j = i + 1; j < selectedPids.length; j++) {
-          if ([selectedPids[i], selectedPids[j]].every(pid => gamePlayers.includes(pid))) return true;
-        }
-      }
-      return false;
+      return selectedPids.some(pid1 =>
+        selectedPids.some(pid2 =>
+          pid1 !== pid2 && gamePlayers.includes(pid1) && gamePlayers.includes(pid2)
+        )
+      );
     }
   });
 
@@ -1373,7 +1633,6 @@ document.getElementById("analyzePlayerBtn").addEventListener("click", function()
 
   const actualPids = Array.from(new Set(filteredGames.flatMap(g => [g.black, g.white])))
                            .filter(pid => selectedPids.includes(pid));
-
   if (!actualPids.length) {
     alert("該当プレイヤーの対局なし");
     return;
@@ -1388,21 +1647,16 @@ document.getElementById("analyzePlayerBtn").addEventListener("click", function()
       const nameObj = allPlayers[pid];
       const playerName = nameObj.surname + " " + nameObj.name;
 
-      const s = {
-        blackWin:0, whiteWin:0, blackLose:0, whiteLose:0, blackDraw:0, whiteDraw:0,
-        blackWinMoves:0, whiteWinMoves:0, blackLoseMoves:0, whiteLoseMoves:0,
-        blackDrawMoves:0, whiteDrawMoves:0, opening3Count:{}, secondDirect:0, secondIndirect:0
-      };
-
-      let firstMoveWin=0, secondMoveWin=0, thirdMoveWin=0, fourthMoveWin=0, fifthMoveWin=0;
-      let combo34Win=0, combo35Win=0, combo45Win=0;
+      const s = { blackWin:0, whiteWin:0, blackLose:0, whiteLose:0,
+                  blackDraw:0, whiteDraw:0,
+                  blackWinMoves:0, whiteWinMoves:0,
+                  blackLoseMoves:0, whiteLoseMoves:0,
+                  blackDrawMoves:0, whiteDrawMoves:0 };
 
       games.forEach(g => {
         if (!(g.black===pid || g.white===pid)) return;
-
         const moves = g.moves ? g.moves.split(/\s+/) : [];
         const movesCount = moves.length;
-        const swapInfo = analyzeSwap(g);
 
         const isBlack = g.black === pid;
         const isWhite = g.white === pid;
@@ -1413,65 +1667,20 @@ document.getElementById("analyzePlayerBtn").addEventListener("click", function()
         if (isWhite && g.bresult===1) { s.whiteLose++; s.whiteLoseMoves+=movesCount; }
         if (isBlack && g.bresult===0.5) { s.blackDraw++; s.blackDrawMoves+=movesCount; }
         if (isWhite && g.bresult===0.5) { s.whiteDraw++; s.whiteDrawMoves+=movesCount; }
-
-      if (swapInfo.moveOwners.length >= 3 && swapInfo.moveOwners[2] === playerName) {
-  const entry = openingMap[g.opening];
-  const openingName = entry ? `${entry.ja} (${entry.en})` : g.opening;
-  s.opening3Count[openingName] = (s.opening3Count[openingName] || 0) + 1;
-}
-
-
-        if (movesCount>=2 && swapInfo.moveOwners[1]===playerName) {
-          const col = moves[1][0];
-          if (col==='h') s.secondDirect++;
-          else if (col==='i'||col==='g') s.secondIndirect++;
-        }
-
-        const winnerName = g.bresult===1 ? allPlayers[g.black].surname+" "+allPlayers[g.black].name
-                         : g.bresult===0 ? allPlayers[g.white].surname+" "+allPlayers[g.white].name
-                         : null;
-        const playerWon = winnerName===playerName;
-
-        if (swapInfo.moveOwners.length>=5){
-          if(swapInfo.moveOwners[0]===playerName && playerWon) firstMoveWin++;
-          if(swapInfo.moveOwners[1]===playerName && playerWon) secondMoveWin++;
-          if(swapInfo.moveOwners[2]===playerName && playerWon) thirdMoveWin++;
-          if(swapInfo.moveOwners[3]===playerName && playerWon) fourthMoveWin++;
-          if(swapInfo.moveOwners[4]===playerName && playerWon) fifthMoveWin++;
-
-          if(swapInfo.moveOwners[2]===playerName && swapInfo.moveOwners[3]===playerName && playerWon) combo34Win++;
-          if(swapInfo.moveOwners[2]===playerName && swapInfo.moveOwners[4]===playerName && playerWon) combo35Win++;
-          if(swapInfo.moveOwners[3]===playerName && swapInfo.moveOwners[4]===playerName && playerWon) combo45Win++;
-        }
       });
 
-const totalGames = games.filter(g => g.black===pid || g.white===pid).length;
-const totalWin  = s.blackWin + s.whiteWin;
-const totalLose = s.blackLose + s.whiteLose;
-const totalDraw = s.blackDraw + s.whiteDraw;
+      const totalGames = games.filter(g => g.black===pid || g.white===pid).length;
+      const totalWin  = s.blackWin + s.whiteWin;
+      const totalLose = s.blackLose + s.whiteLose;
+      const totalDraw = s.blackDraw + s.whiteDraw;
 
-// opening3Count は集計時に文字列をキーとして入れているのでそのまま出力
-const opening3List = Object.entries(s.opening3Count)
-  .map(([k,v]) => `${k}(${v})`)
-  .join(", ");
-
-
-
-
-      statsByPlayer[playerName] = {
-        s, totalWin, totalLose, totalDraw, totalGames, pid, opening3List,
-        firstMoveWin, secondMoveWin, thirdMoveWin, fourthMoveWin, fifthMoveWin,
-        combo34Win, combo35Win, combo45Win
-      };
+      statsByPlayer[playerName] = { s, totalWin, totalLose, totalDraw, totalGames, pid };
     });
 
     container.innerHTML = "";
 
     Object.entries(statsByPlayer).forEach(([playerName, data]) => {
-      const { s, totalWin, totalLose, totalDraw, totalGames, pid, opening3List,
-              firstMoveWin, secondMoveWin, thirdMoveWin, fourthMoveWin, fifthMoveWin,
-              combo34Win, combo35Win, combo45Win } = data;
-
+      const { s, totalWin, totalLose, totalDraw, totalGames, pid } = data;
       if (totalGames === 0) return;
 
       const div = document.createElement("div");
@@ -1480,70 +1689,13 @@ const opening3List = Object.entries(s.opening3Count)
       div.style.padding = "10px";
       div.style.marginBottom = "20px";
 
-      // Flex container
-      const flexContainer = document.createElement("div");
-      flexContainer.style.display = "flex";
-      flexContainer.style.flexWrap = "wrap";
-      flexContainer.style.gap = "20px";
-      div.appendChild(flexContainer);
+     // 対局一覧テーブル
+const table = document.createElement("table");
+table.style.borderCollapse = "collapse";
+table.style.width = "100%";
+table.style.marginTop = "10px";
 
-      // 累計勝敗テーブル
-      const summaryTable = document.createElement("table");
-      summaryTable.style.borderCollapse = "collapse";
-      summaryTable.style.width = "300px";
-      summaryTable.innerHTML = `
-        <thead>
-          <tr><th>${playerName}<BR>から見た累計勝敗</th></tr>
-        </thead>
-        <tbody>
-          <tr>
-            <td>
-              <span style="color:green">勝ち: ${totalWin} (${((totalWin/totalGames)*100).toFixed(1)}%)</span> /<br>
-              <span style="color:red">負け: ${totalLose} (${((totalLose/totalGames)*100).toFixed(1)}%)</span> /<br>
-              <span style="color:blue">引き分け: ${totalDraw} (${((totalDraw/totalGames)*100).toFixed(1)}%)</span><br>
-              （合計 ${totalGames}局）<br>
-              <span style="color:purple">勝ち点: ${totalWin + totalDraw*0.5} (${(((totalWin + totalDraw*0.5)/totalGames)*100).toFixed(1)}%)</span>
-            </td>
-          </tr>
-        </tbody>
-      `;
-      flexContainer.appendChild(summaryTable);
-
-      // 詳細統計
-      const statsDiv = document.createElement("div");
-      statsDiv.style.flex = "1 1 300px";
-      statsDiv.innerHTML = `
-        プレイヤー: ${playerName} (id=${pid})<br>
-        黒勝ち: ${s.blackWin}<br>
-        白勝ち: ${s.whiteWin}<br>
-        黒負け: ${s.blackLose}<br>
-        白負け: ${s.whiteLose}<br>
-        黒勝ち平均手数: ${s.blackWin ? (s.blackWinMoves/s.blackWin).toFixed(1) : "-"}<br>
-        白勝ち平均手数: ${s.whiteWin ? (s.whiteWinMoves/s.whiteWin).toFixed(1) : "-"}<br>
-        黒負け平均手数: ${s.blackLose ? (s.blackLoseMoves/s.blackLose).toFixed(1) : "-"}<br>
-        白負け平均手数: ${s.whiteLose ? (s.whiteLoseMoves/s.whiteLose).toFixed(1) : "-"}<br>
-        黒番引き分け平均手数: ${s.blackDraw ? (s.blackDrawMoves/s.blackDraw).toFixed(1) : "-"}<br>
-        白番引き分け平均手数: ${s.whiteDraw ? (s.whiteDrawMoves/s.whiteDraw).toFixed(1) : "-"}<br>
-        3手目着手珠型（登場回数）: ${opening3List}<br>
-        2手目直接着手: ${s.secondDirect}<br>
-        2手目間接着手: ${s.secondIndirect}<br>
-        1手目着手者勝利数: ${firstMoveWin} (${totalWin?((firstMoveWin/totalWin)*100).toFixed(2):"0.00"}%)<br>
-        2手目着手者勝利数: ${secondMoveWin} (${totalWin?((secondMoveWin/totalWin)*100).toFixed(2):"0.00"}%)<br>
-        3手目着手者勝利数: ${thirdMoveWin} (${totalWin?((thirdMoveWin/totalWin)*100).toFixed(2):"0.00"}%)<br>
-        4手目着手者勝利数: ${fourthMoveWin} (${totalWin?((fourthMoveWin/totalWin)*100).toFixed(2):"0.00"}%)<br>
-        5手目着手者勝利数: ${fifthMoveWin} (${totalWin?((fifthMoveWin/totalWin)*100).toFixed(2):"0.00"}%)<br>
-        3+4手目同一着手者勝利数: ${combo34Win} (${totalWin?((combo34Win/totalWin)*100).toFixed(2):"0.00"}%)<br>
-        3+5手目同一着手者勝利数: ${combo35Win} (${totalWin?((combo35Win/totalWin)*100).toFixed(2):"0.00"}%)<br>
-        4+5手目同一着手者勝利数: ${combo45Win} (${totalWin?((combo45Win/totalWin)*100).toFixed(2):"0.00"}%)<br>
-      `;
-      flexContainer.appendChild(statsDiv);
-
-      // 対局一覧テーブル
-      const table = document.createElement("table");
-      table.style.borderCollapse = "collapse";
-      table.style.width = "100%";
-      table.style.marginTop = "10px";
-      table.innerHTML = `
+table.innerHTML = `
   <thead>
     <tr>
       <th>リンク</th>
@@ -1554,44 +1706,62 @@ const opening3List = Object.entries(s.opening3Count)
     </tr>
   </thead>
   <tbody>
- ${games.filter(g => g.black===pid || g.white===pid).map(g=>{
-  const url = `https://www.renju.net/tournament/${g.tournament}/game/${g.id}/`;
-  const players = `${allPlayers[g.black].surname} ${allPlayers[g.black].name} vs ${allPlayers[g.white].surname} ${allPlayers[g.white].name}`;
-  const result = g.bresult===1 ? "黒勝ち" : g.bresult===0 ? "白勝ち" : "引き分け";
+    ${games.filter(g => g.black === pid || g.white === pid).map(g => {
+      const url = `https://www.renju.net/tournament/${g.tournament}/game/${g.id}/`;
+      const players = `${allPlayers[g.black].surname} ${allPlayers[g.black].name} vs ${allPlayers[g.white].surname} ${allPlayers[g.white].name}`;
+      const result = g.bresult === 1 ? "黒勝ち" : g.bresult === 0 ? "白勝ち" : "引き分け";
 
-  // ★ openingMap から日本語+英語併記を取得
-  const entry = openingMap[g.opening];
-  const openingName = entry ? `${entry.ja} (${entry.en})` : g.opening;
+      // ★ openingMap から珠型名を取得
+      const entry = openingMap[g.opening];
+      const openingName = entry ? `${entry.ja} (${entry.en})` : g.opening;
 
-  // ★ swapInfo から 3手目着手者を確認
-  const swapInfo = analyzeSwap(g);
-  const thirdMover = (swapInfo.moveOwners[2] || "").trim().toLowerCase();
-  const thisPlayer = playerName.trim().toLowerCase();
+      // ★ swapInfo から 3手目着手者を確認
+      const swapInfo = analyzeSwap(g);
+      const thirdMover = (swapInfo.moveOwners[2] || "").trim().toLowerCase();
+      const thisPlayer = playerName.trim().toLowerCase();
 
-  // ★ このプレイヤーが3手目なら黄色
-  const openingHighlight = (thirdMover === thisPlayer)
-    ? " style='background-color:yellow;'" : "";
+      // ★ このプレイヤーが3手目なら黄色ハイライト
+      const openingHighlight = (thirdMover === thisPlayer)
+        ? " style='background-color:yellow;'" : "";
 
-  let playerRecord="", color="";
-  if (g.bresult===0.5) { playerRecord="引き分け"; color="blue"; }
-  else if ((g.black===pid && g.bresult===1) || (g.white===pid && g.bresult===0)) { playerRecord="勝ち"; color="green"; }
-  else { playerRecord="負け"; color="red"; }
+      let playerRecord="", color="";
+      if (g.bresult === 0.5) {
+        playerRecord = "引き分け"; color = "blue";
+      } else if ((g.black === pid && g.bresult === 1) || (g.white === pid && g.bresult === 0)) {
+        playerRecord = "勝ち"; color = "green";
+      } else {
+        playerRecord = "負け"; color = "red";
+      }
 
-  return `<tr>
-    <td><a href="${url}" target="_blank">${g.id}</a></td>
-    <td${openingHighlight}>${openingName}</td>
-    <td>${players}</td>
-    <td>${result}</td>
-    <td><span style="color:${color}">${playerRecord}</span></td>
-  </tr>`;
-}).join('')}
-
-  </tbody>
-
+      return `
+        <tr>
+          <td>
+            <a href="#" class="game-link" data-gameid="${g.id}">${g.id}</a>
+            (<a href="${url}" target="_blank">RIF</a>)
+          </td>
+          <td${openingHighlight}>${openingName}</td>
+          <td>${players}</td>
+          <td>${result}</td>
+          <td><span style="color:${color}">${playerRecord}</span></td>
+        </tr>
       `;
-      div.appendChild(table);
+    }).join("")}
+  </tbody>
+`;
 
-      // Excel出力ボタン（必ず table 描画後）
+// ゲームIDクリック → ポップアップ表示
+table.querySelectorAll(".game-link").forEach(a => {
+  a.addEventListener("click", e => {
+    e.preventDefault();
+    const gameId = a.dataset.gameid;
+    showGamePopup(gameId); // 既存のポップアップ関数を呼ぶ
+  });
+});
+
+div.appendChild(table);
+
+
+      // === Excel保存ボタン ===
       const excelBtn = document.createElement("button");
       excelBtn.textContent = playerName + " の結果をExcel保存";
       excelBtn.style.display = "block";
@@ -1612,48 +1782,45 @@ const opening3List = Object.entries(s.opening3Count)
       });
       div.appendChild(excelBtn);
 
-      // 保存ボタンと説明文用のコンテナ
-const saveContainer = document.createElement("div");
-saveContainer.style.display = "flex";
-saveContainer.style.alignItems = "center";
-saveContainer.style.gap = "10px"; // ボタンとの間隔
+      // === 画像保存ボタン + 注釈 ===
+      const saveContainer = document.createElement("div");
+      saveContainer.style.display = "flex";
+      saveContainer.style.alignItems = "center";
+      saveContainer.style.gap = "10px";
 
-// 保存ボタン
-const saveBtn = document.createElement("button");
-saveBtn.textContent = playerName + " の結果を画像保存";
-saveBtn.addEventListener("click", () => {
-  saveBtn.style.display = "none";
-  excelBtn.style.display = "none";
-  html2canvas(div, { scale: 2 }).then(canvas => {
-    const link = document.createElement("a");
-    link.download = playerName + "_stats.png";
-    link.href = canvas.toDataURL("image/png");
-    link.click();
-    setTimeout(() => {
-      saveBtn.style.display = "block";
-      excelBtn.style.display = "block";
-    }, 5000);
-  });
-});
-saveContainer.appendChild(saveBtn);
+      const saveBtn = document.createElement("button");
+      saveBtn.textContent = playerName + " の結果を画像保存";
+      saveBtn.addEventListener("click", () => {
+        saveBtn.style.display = "none";
+        excelBtn.style.display = "none";
+        html2canvas(div, { scale: 2 }).then(canvas => {
+          const link = document.createElement("a");
+          link.download = playerName + "_stats.png";
+          link.href = canvas.toDataURL("image/png");
+          link.click();
+          setTimeout(() => {
+            saveBtn.style.display = "block";
+            excelBtn.style.display = "block";
+          }, 5000);
+        });
+      });
+      saveContainer.appendChild(saveBtn);
 
-// 説明文（黄色ハイライトの意味）
-const note = document.createElement("span");
-note.textContent = "※珠型欄黄色は該当プレイヤーが3手目を着手した対局";
-note.style.fontSize = "20px";
-note.style.color = "gray";
-saveContainer.appendChild(note);
+      const note = document.createElement("span");
+      note.textContent = "※珠型欄黄色は該当プレイヤーが3手目を着手した対局";
+      note.style.fontSize = "14px";
+      note.style.color = "gray";
+      saveContainer.appendChild(note);
 
-// コンテナをdivに追加
-div.appendChild(saveContainer);
-
-
+      div.appendChild(saveContainer);
       container.appendChild(div);
-    // Top5Movesもここで呼ぶ
+
+      // Top5Moves 呼び出し
       renderTop5Moves(games, "tournamentplayerTop5MovesContainer", [pid]);
     });
   }
 });
+
 
 
 
@@ -1899,6 +2066,136 @@ document.getElementById("modalOverlay").addEventListener("click", () => {
   document.getElementById("modalOverlay").style.display = "none";
 });
 
+document.addEventListener("click", function(e){
+  if(e.target.classList.contains("game-popup-link")){
+    e.preventDefault();
+    const gameId = e.target.dataset.gameid;
+    showGamePopup(gameId);
+  }
+});
+
+// 対局ポップアップ処理
+document.getElementById("prevMove").addEventListener("click", ()=>{
+  if(currentIndex>0){ currentIndex--; renderCurrentBoard(); }
+});
+document.getElementById("nextMove").addEventListener("click", ()=>{
+  if(currentIndex<currentMoves.length){ currentIndex++; renderCurrentBoard(); }
+});
+
+document.getElementById("closeGameModal").addEventListener("click", ()=>{
+  document.getElementById("gameModal").style.display="none";
+  document.getElementById("gameModalOverlay").style.display="none";
+});
+document.getElementById("gameModalOverlay").addEventListener("click", ()=>{
+  document.getElementById("gameModal").style.display="none";
+  document.getElementById("gameModalOverlay").style.display="none";
+});
+
+// 5手戻す
+document.getElementById("prev5").addEventListener("click", () => {
+  currentIndex = Math.max(0, currentIndex - 5);
+  renderCurrentBoard();
+});
+
+// 5手進める
+document.getElementById("next5").addEventListener("click", () => {
+  currentIndex = Math.min(currentMoves.length, currentIndex + 5);
+  renderCurrentBoard();
+});
+
+// 全て戻す
+document.getElementById("firstMove").addEventListener("click", () => {
+  currentIndex = 0;
+  renderCurrentBoard();
+});
+
+// 全て進める
+document.getElementById("lastMove").addEventListener("click", () => {
+  currentIndex = currentMoves.length;
+  renderCurrentBoard();
+});
+
+// GIF保存
+document.getElementById("saveGifBtn").addEventListener("click", async () => {
+  console.log("GIF保存処理開始");
+
+  const mode = document.querySelector("input[name='gifMode']:checked").value;
+  const interval = parseFloat(document.getElementById("gifInterval").value) || 1;
+  const lastDelay = parseFloat(document.getElementById("gifLastDelay").value) || 3;
+  const startMove = parseInt(document.getElementById("gifStartMove").value, 10) || 0;
+
+  const gif = new GIF({
+    workers: 4,
+    quality: 20,
+  });
+
+  // ★ 開始盤面を最初のフレームに追加
+  if (startMove > 0) {
+    const startCanvas = renderBoardForGif(currentMoves.slice(0, startMove), mode);
+    gif.addFrame(startCanvas, { delay: interval * 1000 });
+    console.log(`開始盤面（${startMove}手目まで）を追加`);
+  }
+
+  // ★ startMove+1 手目から最後まで進める
+  for (let i = startMove + 1; i <= currentMoves.length; i++) {
+    const canvas = renderBoardForGif(currentMoves.slice(0, i), mode);
+
+    // 最終フレームなら lastDelay
+    const delay = (i === currentMoves.length)
+      ? lastDelay * 1000
+      : interval * 1000;
+
+    gif.addFrame(canvas, { delay: delay });
+    console.log(`フレーム ${i}/${currentMoves.length} 追加 (delay=${delay}ms)`);
+  }
+
+  gif.on("finished", function (blob) {
+    const link = document.createElement("a");
+    link.href = URL.createObjectURL(blob);
+    link.download = "game.gif";
+    link.click();
+  });
+
+  gif.render();
+});
+
+
+// 盤面PNG保存ボタン処理
+document.getElementById("saveBoardPng").addEventListener("click", () => {
+  const mode = document.querySelector("input[name='pngMode']:checked").value;
+
+  // 現在の盤面を再レンダリング
+  const shownMoves = currentMoves.slice(0, currentIndex);
+  const canvas = renderBoardForGif(shownMoves, mode);
+
+  if (!canvas) {
+    alert("盤面が描画できません");
+    return;
+  }
+
+  // ダウンロード
+  const link = document.createElement("a");
+  const filename = currentGame
+    ? `game_${currentGame.id}_${mode}.png`
+    : `board_${mode}.png`;
+  link.download = filename;
+  link.href = canvas.toDataURL("image/png");
+  link.click();
+});
+
+// デフォルトは表示ON
+let showMoveNumbers = true;
+
+// 切替ボタン処理
+document.getElementById("toggleMoveNumbers").addEventListener("click", () => {
+  showMoveNumbers = !showMoveNumbers;
+  // ボタンのラベルを変更
+  document.getElementById("toggleMoveNumbers").textContent =
+    showMoveNumbers ? "石番号を非表示" : "石番号を表示";
+
+  // 再描画
+  renderCurrentBoard();
+});
 
 
 
@@ -1906,4 +2203,3 @@ document.getElementById("modalOverlay").addEventListener("click", () => {
 </script>
 </body>
 </html>
-
