@@ -928,6 +928,24 @@ function renderCurrentBoard() {
   document.getElementById("currentKifu").textContent = shownMoves.join("");
 }
 
+function drawStars(ctx, marginLeft, marginTop, cell, size) {
+  const starCoords = [
+    { x: 7,  y: 7 },   // 天元
+    { x: 3,  y: 3 },   // D4
+    { x: 3,  y: 11 },  // D12
+    { x: 11, y: 3 },   // L4
+    { x: 11, y: 11 }   // L12
+  ];
+
+  ctx.fillStyle = "black";
+  starCoords.forEach(pos => {
+    const cx = marginLeft + pos.x * cell;
+    const cy = marginTop + (size - 1 - pos.y) * cell;
+    ctx.beginPath();
+    ctx.arc(cx, cy, 4, 0, Math.PI * 2); // 半径4px
+    ctx.fill();
+  });
+}
 
 
 function renderBoardForGif(moves, mode) {
@@ -975,6 +993,9 @@ function renderBoardForGif(moves, mode) {
   // --- 外枠 ---
   ctx.lineWidth = 2;
   ctx.strokeRect(marginLeft + 0.5, marginTop + 0.5, innerSize, innerSize);
+
+  // ★ 星を描画
+drawStars(ctx, marginLeft, marginTop, cell, size);
 
   // --- 座標ラベル ---
   if (mode !== "board") {
@@ -2327,3 +2348,4 @@ document.getElementById("toggleMoveNumbers").addEventListener("click", () => {
 </script>
 </body>
 </html>
+
