@@ -37,6 +37,9 @@
     <label>更新間隔(秒): <input type="number" id="gifInterval" value="0.5" step="0.1"></label>
     <label>最初フレーム静止(秒): <input type="number" id="gifFirstDelay" value="1" step="0.1"></label>
     <label>最終フレーム静止(秒): <input type="number" id="gifLastDelay" value="2" step="0.1"></label>
+    <br><button id="generateLinkBtn">リンク生成＆コピー</button>
+    <br>
+    <input type="text" id="generatedLink" readonly style="width:60%;">
   </div>
   <br>
   <div id="board"></div>
@@ -399,42 +402,153 @@
         }
       });
 
-      // ★ 修正: ラベル描画（保存にも反映）
+      // ラベルとコメントも描画
       ctx.font = "bold 14px sans-serif";
       ctx.textAlign = "center";
       ctx.textBaseline = "middle";
       labels.forEach(l => {
         const cx = marginLeft + l.x * cell;
         const cy = marginTop + (size - 1 - l.y) * cell;
-
         ctx.fillStyle = "#F9EBCF";
-        ctx.fillRect(cx - cell/2 + 1, cy - cell/2 + 1, cell - 2, cell - 2);
-
+                ctx.fillRect(cx - cell/2 + 1, cy - cell/2 + 1, cell - 2, cell - 2);
         ctx.fillStyle = "red";
         ctx.fillText(l.text, cx, cy);
       });
 
       drawComments(ctx, canvas.width, canvas.height);
-
       return canvas;
-    }
+    }  // ← ここで関数を閉じる
 
-    // 初期描画
-    renderBoard();
+    // === URLパラメータから盤面を再現 & UIイベント初期化 ===
+    window.addEventListener("load", () => {
+      const params = new URLSearchParams(window.location.search);
 
-    // --- モード切替 ---
-    document.getElementById("toggleModeBtn").addEventListener("click", () => {
-      freeMode = !freeMode;
-      document.getElementById("toggleModeBtn").textContent =
-        freeMode ? "通常モードに切替" : "自由配置モードに切替";
-
-      if (!freeMode) {
-        const startColor = document.querySelector("input[name='startColor']:checked").value;
-        blackTurn = (startColor === "black");
+      // --- 通常モード棋譜 ---
+      const kifu = params.get("kifu");
+      if (kifu) {
+        const letters = "abcdefghijklmno";
+        for (let i = 0; i < kifu.length; i += 2) {
+          const x = letters.indexOf(kifu[i]);
+          const y = parseInt(kifu[i+1], 10) - 1;
+          if (x >= 0 && y >= 0) {
+            const color = ((i / 2) % 2 === 0) ? "black" : "white";
+            const moveNumber = moves.filter(m => m.number !== null).length + 1;
+            moves.push({ x, y, color, number: moveNumber });
+            boardState[y][x] = color;
+          }
+        }
       }
+
+      // --- 自由配置 ---
+      const stones = params.get("stones");
+      if (stones) {
+        const letters = "abcdefghijklmno";
+        stones.split(",").forEach(str => {
+          const coord = str.slice(0, -1);
+          const colMark = str.slice(-1).toLowerCase();
+          const x = letters.indexOf(coord[0]);
+          const y = parseInt(coord.slice(1), 10) - 1;
+          if (x >= 0 && y >= 0 && (colMark === "b" || colMark === "w")) {
+            const color = (colMark === "b") ? "black" : "white";
+            moves.push({ x, y, color, number: null });
+            boardState[y][x] = color;
+          }
+        });
+      }
+
+      // --- ラベル ---
+      const labelsParam = params.get("labels");
+      if (labelsParam) {
+        const letters = "abcdefghijklmno";
+        labelsParam.split(",").forEach(str => {
+          const [coord, text] = str.split(":");
+          const x = letters.indexOf(coord[0]);
+          const y = parseInt(coord.slice(1), 10) - 1;
+          if (x >= 0 && y >= 0 && text) {
+            labels.push({ x, y, text });
+          }
+        });
+      }
+
+      // --- コメント ---
+      const top = params.get("top");
+      const bottom = params.get("bottom");
+      if (top) document.getElementById("commentTop").value = top;
+      if (bottom) document.getElementById("commentBottom").value = bottom;
+
+      // --- UIイベント ---
+      const toggleBtn = document.getElementById("toggleModeBtn");
+      toggleBtn.addEventListener("click", () => {
+        freeMode = !freeMode;
+        toggleBtn.textContent = freeMode ? "通常モードに切替" : "自由配置モードに切替";
+      });
+      document.querySelectorAll('input[name="startColor"]').forEach(r => {
+        r.addEventListener("change", () => {
+          const val = document.querySelector('input[name="startColor"]:checked').value;
+          blackTurn = (val === "black");
+        });
+      });
+
+      // 初期描画
       renderBoard();
     });
 
-  </script>
+    // リンク生成ボタン
+    document.getElementById("generateLinkBtn").addEventListener("click", () => {
+      const letters = "abcdefghijklmno";
+      let url = window.location.origin + window.location.pathname;
+      let queryParts = [];
+
+      // --- 通常モード棋譜 ---
+      const numberedMoves = moves.filter(m => m.number !== null);
+      if (numberedMoves.length > 0) {
+        const kifu = numberedMoves
+          .sort((a, b) => a.number - b.number)
+          .map(m => letters[m.x] + (m.y + 1))
+          .join("");
+        queryParts.push("kifu=" + encodeURIComponent(kifu));
+      }
+
+      // --- 自由配置 ---
+      const freeStones = moves
+        .filter(m => m.number === null)
+        .map(m => letters[m.x] + (m.y + 1) + (m.color === "black" ? "b" : "w"))
+        .join(",");
+      if (freeStones) {
+        queryParts.push("stones=" + encodeURIComponent(freeStones));
+      }
+
+      // --- ラベル ---
+      const labelStr = labels
+        .map(l => letters[l.x] + (l.y + 1) + ":" + l.text)
+        .join(",");
+      if (labelStr) {
+        queryParts.push("labels=" + encodeURIComponent(labelStr));
+      }
+
+      // --- コメント ---
+      const topText = document.getElementById("commentTop").value.trim();
+      const bottomText = document.getElementById("commentBottom").value.trim();
+      if (topText) queryParts.push("top=" + encodeURIComponent(topText));
+      if (bottomText) queryParts.push("bottom=" + encodeURIComponent(bottomText));
+
+      if (queryParts.length > 0) {
+        url += "?" + queryParts.join("&");
+      }
+
+      // 表示用
+      const linkBox = document.getElementById("generatedLink");
+      linkBox.value = url;
+
+      // コピー
+      navigator.clipboard.writeText(url)
+        .then(() => alert("リンクをコピーしました！"))
+        .catch(err => {
+          console.error("コピー失敗:", err);
+          alert("コピーに失敗しました");
+        });
+    });
+  </script>  
 </body>
 </html>
+
