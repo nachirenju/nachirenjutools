@@ -1029,9 +1029,15 @@ if (mode === "full" && currentGame) {
 
   const blackSurname = allPlayers[currentGame.black]?.surname || currentGame.black;
   const whiteSurname = allPlayers[currentGame.white]?.surname || currentGame.white;
+   const blackFull = allPlayers[currentGame.black]
+    ? `${allPlayers[currentGame.black].surname} ${allPlayers[currentGame.black].name}`.trim()
+    : currentGame.black;
+  const whiteFull = allPlayers[currentGame.white]
+    ? `${allPlayers[currentGame.white].surname} ${allPlayers[currentGame.white].name}`.trim()
+    : currentGame.white;
 
-  ctx.fillText(`黒: ${blackSurname}`, 10, marginTop + innerSize + 35);
-  ctx.fillText(`白: ${whiteSurname}`, 10, marginTop + innerSize + 55);
+  ctx.fillText(`黒: ${blackFull}`, 10, marginTop + innerSize + 35);
+  ctx.fillText(`白: ${whiteFull}`, 10, marginTop + innerSize + 55);
 
   // ★ swap情報を surname で整形して出力
   const swapInfo = analyzeSwap(currentGame);
