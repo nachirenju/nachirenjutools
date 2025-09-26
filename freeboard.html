@@ -424,20 +424,22 @@
       const params = new URLSearchParams(window.location.search);
 
       // --- 通常モード棋譜 ---
-      const kifu = params.get("kifu");
-      if (kifu) {
-        const letters = "abcdefghijklmno";
-        for (let i = 0; i < kifu.length; i += 2) {
-          const x = letters.indexOf(kifu[i]);
-          const y = parseInt(kifu[i+1], 10) - 1;
-          if (x >= 0 && y >= 0) {
-            const color = ((i / 2) % 2 === 0) ? "black" : "white";
-            const moveNumber = moves.filter(m => m.number !== null).length + 1;
-            moves.push({ x, y, color, number: moveNumber });
-            boardState[y][x] = color;
-          }
-        }
-      }
+const kifu = params.get("kifu");
+if (kifu) {
+  const letters = "abcdefghijklmno";
+  const positions = kifu.split(",");
+  positions.forEach((pos, idx) => {
+    const x = letters.indexOf(pos[0]);
+    const y = parseInt(pos.slice(1), 10) - 1;
+    if (x >= 0 && y >= 0) {
+      const color = (idx % 2 === 0) ? "black" : "white"; // idxで交互に
+      const moveNumber = idx + 1; // move番号もidxベースで連番
+      moves.push({ x, y, color, number: moveNumber });
+      boardState[y][x] = color;
+    }
+  });
+}
+
 
       // --- 自由配置 ---
       const stones = params.get("stones");
@@ -499,16 +501,15 @@
       let url = window.location.origin + window.location.pathname;
       let queryParts = [];
 
-      // --- 通常モード棋譜 ---
-      const numberedMoves = moves.filter(m => m.number !== null);
-      if (numberedMoves.length > 0) {
-        const kifu = numberedMoves
-          .sort((a, b) => a.number - b.number)
-          .map(m => letters[m.x] + (m.y + 1))
-          .join("");
-        queryParts.push("kifu=" + encodeURIComponent(kifu));
-      }
-
+    // --- 通常モード棋譜 ---
+const numberedMoves = moves.filter(m => m.number !== null);
+if (numberedMoves.length > 0) {
+  const kifu = numberedMoves
+    .sort((a, b) => a.number - b.number)
+    .map(m => letters[m.x] + (m.y + 1))
+    .join(",");   // ★ ここを修正（区切り文字を入れる）
+  queryParts.push("kifu=" + encodeURIComponent(kifu));
+}
       // --- 自由配置 ---
       const freeStones = moves
         .filter(m => m.number === null)
