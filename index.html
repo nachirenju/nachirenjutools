@@ -852,43 +852,60 @@ let currentGame = null;
 
 
 
-function showGamePopup(gameId){
+function showGamePopup(gameId) {
   const g = allGames.find(x => x.id === gameId);
-  if(!g) return;
-  currentGame = g; // ★追加
+  if (!g) return;
+  currentGame = g;
 
-  // 情報を上に表示
-  const blackName = allPlayers[g.black] ? allPlayers[g.black].surname + " " + allPlayers[g.black].name : g.black;
-  const whiteName = allPlayers[g.white] ? allPlayers[g.white].surname + " " + allPlayers[g.white].name : g.white;
-  const resultText = g.bresult == 1 ? "黒勝ち" : g.bresult == 0 ? "白勝ち" : "引き分け";
+  // --- 大会情報を取得 ---
+  let tournamentName = "";
+  let tournamentYear = "";
+  if (tournamentMap[g.tournament]) {
+    tournamentName = tournamentMap[g.tournament].name || "";
+    tournamentYear = tournamentMap[g.tournament].year || "";
+  }
 
-  // ★ swap情報を surname だけで整形
+  // 対局者情報
+  const blackName = allPlayers[g.black]
+    ? allPlayers[g.black].surname + " " + allPlayers[g.black].name
+    : g.black;
+  const whiteName = allPlayers[g.white]
+    ? allPlayers[g.white].surname + " " + allPlayers[g.white].name
+    : g.white;
+  const resultText = g.bresult == 1 ? "黒勝ち"
+                   : g.bresult == 0 ? "白勝ち"
+                   : "引き分け";
+
+  // swap 情報（surname のみに整形）
   const swapInfo = analyzeSwap(g);
   const swapMoves = swapInfo.moveOwners.map((owner, idx) => {
     if (!owner) return `${idx+1}手目:-`;
     let surname = owner;
     Object.values(allPlayers).forEach(p => {
       const full = `${p.surname} ${p.name}`.trim();
-      if (full === owner) surname = p.surname; // surnameだけ抽出
+      if (full === owner) surname = p.surname;
     });
     return `${idx+1}手目:${surname}`;
-  }).join("　"); // 全角スペースで区切り
+  }).join("　");
 
+  // --- HTML出力 ---
   document.getElementById("gameInfo").innerHTML = `
+    <p><b>${tournamentName}</b> (${tournamentYear})</p>
     <p><b>黒:</b> ${blackName}　<b>白:</b> ${whiteName}</p>
     <p><b>結果:</b> ${resultText}</p>
     <p><b>swap:</b> ${swapMoves}</p>
   `;
 
   // 棋譜配列
-  currentMoves = g.moves.split(/\s+/).filter(m=>m);
-  currentIndex = currentMoves.length; // ★ 初期表示を最終手まで
+  currentMoves = g.moves.split(/\s+/).filter(m => m);
+  currentIndex = currentMoves.length;
 
   renderCurrentBoard();
 
   document.getElementById("gameModal").style.display = "block";
   document.getElementById("gameModalOverlay").style.display = "block";
 }
+
 
 
 function renderCurrentBoard() {
@@ -1647,16 +1664,24 @@ document.getElementById("analyzePlayerBtn").addEventListener("click", function()
       const nameObj = allPlayers[pid];
       const playerName = nameObj.surname + " " + nameObj.name;
 
-      const s = { blackWin:0, whiteWin:0, blackLose:0, whiteLose:0,
-                  blackDraw:0, whiteDraw:0,
-                  blackWinMoves:0, whiteWinMoves:0,
-                  blackLoseMoves:0, whiteLoseMoves:0,
-                  blackDrawMoves:0, whiteDrawMoves:0 };
+      const s = {
+        blackWin:0, whiteWin:0, blackLose:0, whiteLose:0,
+        blackDraw:0, whiteDraw:0,
+        blackWinMoves:0, whiteWinMoves:0,
+        blackLoseMoves:0, whiteLoseMoves:0,
+        blackDrawMoves:0, whiteDrawMoves:0,
+        opening3Count:{}, secondDirect:0, secondIndirect:0
+      };
+
+      let firstMoveWin=0, secondMoveWin=0, thirdMoveWin=0, fourthMoveWin=0, fifthMoveWin=0;
+      let combo34Win=0, combo35Win=0, combo45Win=0;
 
       games.forEach(g => {
         if (!(g.black===pid || g.white===pid)) return;
+
         const moves = g.moves ? g.moves.split(/\s+/) : [];
         const movesCount = moves.length;
+        const swapInfo = analyzeSwap(g);
 
         const isBlack = g.black === pid;
         const isWhite = g.white === pid;
@@ -1667,6 +1692,38 @@ document.getElementById("analyzePlayerBtn").addEventListener("click", function()
         if (isWhite && g.bresult===1) { s.whiteLose++; s.whiteLoseMoves+=movesCount; }
         if (isBlack && g.bresult===0.5) { s.blackDraw++; s.blackDrawMoves+=movesCount; }
         if (isWhite && g.bresult===0.5) { s.whiteDraw++; s.whiteDrawMoves+=movesCount; }
+
+        // 3手目珠型集計
+        if (swapInfo.moveOwners.length>=3 && swapInfo.moveOwners[2]===playerName) {
+          const entry = openingMap[g.opening];
+          const openingName = entry ? `${entry.ja} (${entry.en})` : g.opening;
+          s.opening3Count[openingName] = (s.opening3Count[openingName]||0)+1;
+        }
+
+        // 2手目直接/間接
+        if (movesCount>=2 && swapInfo.moveOwners[1]===playerName) {
+          const col = moves[1][0];
+          if (col==='h') s.secondDirect++;
+          else if (col==='i'||col==='g') s.secondIndirect++;
+        }
+
+        // 勝者確認
+        const winnerName = g.bresult===1 ? allPlayers[g.black].surname+" "+allPlayers[g.black].name
+                         : g.bresult===0 ? allPlayers[g.white].surname+" "+allPlayers[g.white].name
+                         : null;
+        const playerWon = winnerName===playerName;
+
+        if (swapInfo.moveOwners.length>=5){
+          if(swapInfo.moveOwners[0]===playerName && playerWon) firstMoveWin++;
+          if(swapInfo.moveOwners[1]===playerName && playerWon) secondMoveWin++;
+          if(swapInfo.moveOwners[2]===playerName && playerWon) thirdMoveWin++;
+          if(swapInfo.moveOwners[3]===playerName && playerWon) fourthMoveWin++;
+          if(swapInfo.moveOwners[4]===playerName && playerWon) fifthMoveWin++;
+
+          if(swapInfo.moveOwners[2]===playerName && swapInfo.moveOwners[3]===playerName && playerWon) combo34Win++;
+          if(swapInfo.moveOwners[2]===playerName && swapInfo.moveOwners[4]===playerName && playerWon) combo35Win++;
+          if(swapInfo.moveOwners[3]===playerName && swapInfo.moveOwners[4]===playerName && playerWon) combo45Win++;
+        }
       });
 
       const totalGames = games.filter(g => g.black===pid || g.white===pid).length;
@@ -1674,13 +1731,26 @@ document.getElementById("analyzePlayerBtn").addEventListener("click", function()
       const totalLose = s.blackLose + s.whiteLose;
       const totalDraw = s.blackDraw + s.whiteDraw;
 
-      statsByPlayer[playerName] = { s, totalWin, totalLose, totalDraw, totalGames, pid };
+      // ★ ここを修正 → 英語表記込みで整形
+      const opening3List = Object.entries(s.opening3Count)
+        .map(([k,v]) => `${k}(${v})`)
+        .join(", ");
+
+      statsByPlayer[playerName] = {
+        s, totalWin, totalLose, totalDraw, totalGames, pid, opening3List,
+        firstMoveWin, secondMoveWin, thirdMoveWin, fourthMoveWin, fifthMoveWin,
+        combo34Win, combo35Win, combo45Win
+      };
     });
 
     container.innerHTML = "";
 
+    // === ここから出力（さっきの続き） ===
     Object.entries(statsByPlayer).forEach(([playerName, data]) => {
-      const { s, totalWin, totalLose, totalDraw, totalGames, pid } = data;
+      const { s, totalWin, totalLose, totalDraw, totalGames, pid, opening3List,
+              firstMoveWin, secondMoveWin, thirdMoveWin, fourthMoveWin, fifthMoveWin,
+              combo34Win, combo35Win, combo45Win } = data;
+
       if (totalGames === 0) return;
 
       const div = document.createElement("div");
@@ -1689,77 +1759,124 @@ document.getElementById("analyzePlayerBtn").addEventListener("click", function()
       div.style.padding = "10px";
       div.style.marginBottom = "20px";
 
-     // 対局一覧テーブル
-const table = document.createElement("table");
-table.style.borderCollapse = "collapse";
-table.style.width = "100%";
-table.style.marginTop = "10px";
+      // === 詳細統計を復活 ===
+      const flexContainer = document.createElement("div");
+      flexContainer.style.display = "flex";
+      flexContainer.style.flexWrap = "wrap";
+      flexContainer.style.gap = "20px";
+      div.appendChild(flexContainer);
 
-table.innerHTML = `
-  <thead>
-    <tr>
-      <th>リンク</th>
-      <th>珠型</th>
-      <th>対局者</th>
-      <th>結果</th>
-      <th>${playerName}から見た勝敗</th>
-    </tr>
-  </thead>
-  <tbody>
-    ${games.filter(g => g.black === pid || g.white === pid).map(g => {
-      const url = `https://www.renju.net/tournament/${g.tournament}/game/${g.id}/`;
-      const players = `${allPlayers[g.black].surname} ${allPlayers[g.black].name} vs ${allPlayers[g.white].surname} ${allPlayers[g.white].name}`;
-      const result = g.bresult === 1 ? "黒勝ち" : g.bresult === 0 ? "白勝ち" : "引き分け";
-
-      // ★ openingMap から珠型名を取得
-      const entry = openingMap[g.opening];
-      const openingName = entry ? `${entry.ja} (${entry.en})` : g.opening;
-
-      // ★ swapInfo から 3手目着手者を確認
-      const swapInfo = analyzeSwap(g);
-      const thirdMover = (swapInfo.moveOwners[2] || "").trim().toLowerCase();
-      const thisPlayer = playerName.trim().toLowerCase();
-
-      // ★ このプレイヤーが3手目なら黄色ハイライト
-      const openingHighlight = (thirdMover === thisPlayer)
-        ? " style='background-color:yellow;'" : "";
-
-      let playerRecord="", color="";
-      if (g.bresult === 0.5) {
-        playerRecord = "引き分け"; color = "blue";
-      } else if ((g.black === pid && g.bresult === 1) || (g.white === pid && g.bresult === 0)) {
-        playerRecord = "勝ち"; color = "green";
-      } else {
-        playerRecord = "負け"; color = "red";
-      }
-
-      return `
-        <tr>
-          <td>
-            <a href="#" class="game-link" data-gameid="${g.id}">${g.id}</a>
-            (<a href="${url}" target="_blank">RIF</a>)
-          </td>
-          <td${openingHighlight}>${openingName}</td>
-          <td>${players}</td>
-          <td>${result}</td>
-          <td><span style="color:${color}">${playerRecord}</span></td>
-        </tr>
+      // 累計勝敗テーブル
+      const summaryTable = document.createElement("table");
+      summaryTable.style.borderCollapse = "collapse";
+      summaryTable.style.width = "300px";
+      summaryTable.innerHTML = `
+        <thead>
+          <tr><th>${playerName}<br>から見た累計勝敗</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>
+              <span style="color:green">勝ち: ${totalWin} (${((totalWin/totalGames)*100).toFixed(1)}%)</span> /<br>
+              <span style="color:red">負け: ${totalLose} (${((totalLose/totalGames)*100).toFixed(1)}%)</span> /<br>
+              <span style="color:blue">引き分け: ${totalDraw} (${((totalDraw/totalGames)*100).toFixed(1)}%)</span><br>
+              （合計 ${totalGames}局）<br>
+              <span style="color:purple">勝ち点: ${totalWin + totalDraw*0.5} (${(((totalWin + totalDraw*0.5)/totalGames)*100).toFixed(1)}%)</span>
+            </td>
+          </tr>
+        </tbody>
       `;
-    }).join("")}
-  </tbody>
-`;
+      flexContainer.appendChild(summaryTable);
 
-// ゲームIDクリック → ポップアップ表示
-table.querySelectorAll(".game-link").forEach(a => {
-  a.addEventListener("click", e => {
-    e.preventDefault();
-    const gameId = a.dataset.gameid;
-    showGamePopup(gameId); // 既存のポップアップ関数を呼ぶ
-  });
-});
+      // 詳細統計
+        const statsDiv = document.createElement("div");
+      statsDiv.style.flex = "1 1 300px";
+      statsDiv.innerHTML = `
+        プレイヤー: ${playerName} (id=${pid})<br>
+        黒勝ち: ${s.blackWin}<br>
+        白勝ち: ${s.whiteWin}<br>
+        黒負け: ${s.blackLose}<br>
+        白負け: ${s.whiteLose}<br>
+        黒勝ち平均手数: ${s.blackWin ? (s.blackWinMoves/s.blackWin).toFixed(1) : "-"}<br>
+        白勝ち平均手数: ${s.whiteWin ? (s.whiteWinMoves/s.whiteWin).toFixed(1) : "-"}<br>
+        黒負け平均手数: ${s.blackLose ? (s.blackLoseMoves/s.blackLose).toFixed(1) : "-"}<br>
+        白負け平均手数: ${s.whiteLose ? (s.whiteLoseMoves/s.whiteLose).toFixed(1) : "-"}<br>
+        黒番引き分け平均手数: ${s.blackDraw ? (s.blackDrawMoves/s.blackDraw).toFixed(1) : "-"}<br>
+        白番引き分け平均手数: ${s.whiteDraw ? (s.whiteDrawMoves/s.whiteDraw).toFixed(1) : "-"}<br>
+        3手目着手珠型（登場回数）: ${opening3List}<br>
+        2手目直接着手: ${s.secondDirect}<br>
+        2手目間接着手: ${s.secondIndirect}<br>
+        1手目着手者勝利数: ${firstMoveWin} (${totalWin?((firstMoveWin/totalWin)*100).toFixed(2):"0.00"}%)<br>
+        2手目着手者勝利数: ${secondMoveWin} (${totalWin?((secondMoveWin/totalWin)*100).toFixed(2):"0.00"}%)<br>
+        3手目着手者勝利数: ${thirdMoveWin} (${totalWin?((thirdMoveWin/totalWin)*100).toFixed(2):"0.00"}%)<br>
+        4手目着手者勝利数: ${fourthMoveWin} (${totalWin?((fourthMoveWin/totalWin)*100).toFixed(2):"0.00"}%)<br>
+        5手目着手者勝利数: ${fifthMoveWin} (${totalWin?((fifthMoveWin/totalWin)*100).toFixed(2):"0.00"}%)<br>
+        3+4手目同一着手者勝利数: ${combo34Win} (${totalWin?((combo34Win/totalWin)*100).toFixed(2):"0.00"}%)<br>
+        3+5手目同一着手者勝利数: ${combo35Win} (${totalWin?((combo35Win/totalWin)*100).toFixed(2):"0.00"}%)<br>
+        4+5手目同一着手者勝利数: ${combo45Win} (${totalWin?((combo45Win/totalWin)*100).toFixed(2):"0.00"}%)<br>
+      `;
+      flexContainer.appendChild(statsDiv);
 
-div.appendChild(table);
+      // === 対局一覧テーブル ===
+      const table = document.createElement("table");
+      table.style.borderCollapse = "collapse";
+      table.style.width = "100%";
+      table.style.marginTop = "10px";
+      table.innerHTML = `
+        <thead>
+          <tr>
+            <th>リンク</th>
+            <th>珠型</th>
+            <th>対局者</th>
+            <th>結果</th>
+            <th>${playerName}から見た勝敗</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${games.filter(g => g.black === pid || g.white === pid).map(g => {
+            const url = `https://www.renju.net/tournament/${g.tournament}/game/${g.id}/`;
+            const players = `${allPlayers[g.black].surname} ${allPlayers[g.black].name} vs ${allPlayers[g.white].surname} ${allPlayers[g.white].name}`;
+            const result = g.bresult === 1 ? "黒勝ち" : g.bresult === 0 ? "白勝ち" : "引き分け";
+            const entry = openingMap[g.opening];
+            const openingName = entry ? `${entry.ja} (${entry.en})` : g.opening;
 
+            const swapInfo = analyzeSwap(g);
+            const thirdMover = (swapInfo.moveOwners[2] || "").trim().toLowerCase();
+            const thisPlayer = playerName.trim().toLowerCase();
+            const openingHighlight = (thirdMover === thisPlayer) ? " style='background-color:yellow;'" : "";
+
+            let playerRecord="", color="";
+            if (g.bresult === 0.5) {
+              playerRecord = "引き分け"; color = "blue";
+            } else if ((g.black === pid && g.bresult === 1) || (g.white === pid && g.bresult === 0)) {
+              playerRecord = "勝ち"; color = "green";
+            } else {
+              playerRecord = "負け"; color = "red";
+            }
+
+            return `
+              <tr>
+                <td>
+                  <a href="#" class="game-link" data-gameid="${g.id}">${g.id}</a>
+                  (<a href="${url}" target="_blank">RIF</a>)
+                </td>
+                <td${openingHighlight}>${openingName}</td>
+                <td>${players}</td>
+                <td>${result}</td>
+                <td><span style="color:${color}">${playerRecord}</span></td>
+              </tr>
+            `;
+          }).join("")}
+        </tbody>
+      `;
+            table.querySelectorAll(".game-link").forEach(a => {
+        a.addEventListener("click", e => {
+          e.preventDefault();
+          const gameId = a.dataset.gameid;
+          showGamePopup(gameId); // 既存のポップアップ関数を呼ぶ
+        });
+      });
+      div.appendChild(table);
 
       // === Excel保存ボタン ===
       const excelBtn = document.createElement("button");
@@ -1820,6 +1937,7 @@ div.appendChild(table);
     });
   }
 });
+
 
 
 
