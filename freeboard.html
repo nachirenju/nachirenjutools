@@ -27,21 +27,34 @@
     <button id="saveBoardPng">PNG保存</button>
     <button id="saveGifBtn">GIF保存</button>
     <br>
+    <!-- ★ 追加部分 -->
+    <label><input type="checkbox" id="inputNumber"> 数字を入力</label>
+    <label><input type="checkbox" id="inputAlpha"> アルファベットを入力</label>
+    <button id="clearLabels">入力文字削除</button>
+    <br>
+    <!-- ★ ここまで追加 -->
     <label>開始手数: <input type="number" id="gifStartMove" value="1" min="1"></label>
-   <!-- ここを修正 -->
-<label>更新間隔(秒): <input type="number" id="gifInterval" value="0.5" step="0.1"></label>
-<label>最初フレーム静止(秒): <input type="number" id="gifFirstDelay" value="1" step="0.1"></label>
-<label>最終フレーム静止(秒): <input type="number" id="gifLastDelay" value="2" step="0.1"></label>
-</div>
+    <label>更新間隔(秒): <input type="number" id="gifInterval" value="0.5" step="0.1"></label>
+    <label>最初フレーム静止(秒): <input type="number" id="gifFirstDelay" value="1" step="0.1"></label>
+    <label>最終フレーム静止(秒): <input type="number" id="gifLastDelay" value="2" step="0.1"></label>
+  </div>
   <br>
   <div id="board"></div>
- <div style="margin-top:10px; text-align:left;">
-  <textarea id="kifuInput" rows="3"
-            style="width:40%; font-family:monospace;"
-            placeholder="ここに棋譜を入力 (例: h8i9h10...)"></textarea>
-</div>
+  <div style="margin-top:10px; text-align:left;">
+    <textarea id="kifuInput" rows="3"
+              style="width:40%; font-family:monospace;"
+              placeholder="ここに棋譜を入力 (例: h8i9h10...)"></textarea>
+  </div>
 
-
+  <!-- コメント欄 -->
+  <div style="margin-top:10px;">
+    上段コメント:画像保存時、盤の上側に入力したテキストが表示されます。<br>
+    <textarea id="commentTop" rows="2" style="width:60%;"></textarea>
+  </div>
+  <div style="margin-top:10px;">
+    下段コメント:画像保存時、盤の下側に入力したテキストが表示されます。<br>
+    <textarea id="commentBottom" rows="2" style="width:60%;"></textarea>
+  </div>
 
   <script src="https://cdn.jsdelivr.net/npm/gif.js.optimized/dist/gif.js"></script>
 
@@ -50,327 +63,378 @@
     const cell = 30;
     const marginLeft = 25;
     const marginRight = 20;
-    const marginTop = 20;
-    const marginBottom = 20;
+    const marginTop = 60;
+    const marginBottom = 60;
 
     let freeMode = false;
     let blackTurn = true;
     let moves = []; // {x, y, color, number}
     let boardState = Array.from({ length: size }, () => Array(size).fill(null));
 
-   // --- 盤描画 ---
-function renderBoard() {
-  const innerSize = (size - 1) * cell;
-  const boardSize = size * cell;
-  const canvasWidth  = marginLeft + boardSize + marginRight;
-  const canvasHeight = marginTop + boardSize + marginBottom;
+    // ★ 追加: ラベル管理
+    let labels = []; // {x,y,text}
+    let nextNumber = 1;
+    let nextAlphaCode = "A".charCodeAt(0);
 
-  const canvas = document.createElement("canvas");
-  canvas.width = canvasWidth;
-  canvas.height = canvasHeight;
-  const ctx = canvas.getContext("2d");
+    // 座標描画
+    function drawCoordinates(ctx, canvasWidth, canvasHeight, innerSize) {
+      const letters = "ABCDEFGHIJKLMNO".split("");
+      ctx.font = "bold 14px sans-serif";
+      ctx.fillStyle = "black";
 
-  // 背景
-  ctx.fillStyle = "#F9EBCF";
-  ctx.fillRect(0, 0, canvas.width, canvas.height);
+      // 横軸アルファベット
+      ctx.textAlign = "center";
+      for (let i = 0; i < size; i++) {
+        ctx.fillText(letters[i], marginLeft + i * cell, marginTop + innerSize + 15);
+      }
 
-  // 内側の細線
-  ctx.strokeStyle = "black";
-  ctx.lineWidth = 1;
-  for (let i = 1; i < size - 1; i++) {
-    const x = marginLeft + i * cell + 0.5;
-    ctx.beginPath();
-    ctx.moveTo(x, marginTop);
-    ctx.lineTo(x, marginTop + innerSize);
-    ctx.stroke();
-  }
-  for (let i = 1; i < size - 1; i++) {
-    const y = marginTop + i * cell + 0.5;
-    ctx.beginPath();
-    ctx.moveTo(marginLeft, y);
-    ctx.lineTo(marginLeft + innerSize, y);
-    ctx.stroke();
-  }
+      // 縦軸数字
+      ctx.textAlign = "right";
+      ctx.textBaseline = "middle";
+      for (let i = 0; i < size; i++) {
+        ctx.fillText(size - i, marginLeft - 5, marginTop + i * cell + cell / 2 - 15);
+      }
+    }
 
-  // 外枠
-  ctx.lineWidth = 2;
-  ctx.strokeRect(marginLeft + 0.5, marginTop + 0.5, innerSize, innerSize);
+    // 星描画
+    function drawStars(ctx) {
+      const starCoords = [
+        { x: 7,  y: 7 },   // 天元
+        { x: 3,  y: 3 },   // D4
+        { x: 3,  y: 11 },  // D12
+        { x: 11, y: 3 },   // L4
+        { x: 11, y: 11 }   // L12
+      ];
 
-  // 座標ラベル
-  const letters = "ABCDEFGHIJKLMNO".split("");
-  ctx.font = "bold 14px sans-serif";
-  ctx.fillStyle = "black";
+      ctx.fillStyle = "black";
+      starCoords.forEach(pos => {
+        const cx = marginLeft + pos.x * cell;
+        const cy = marginTop + (size - 1 - pos.y) * cell;
+        ctx.beginPath();
+        ctx.arc(cx, cy, 4, 0, Math.PI * 2);
+        ctx.fill();
+      });
+    }
 
-  ctx.textAlign = "center";
-  for (let i = 0; i < size; i++) {
-    ctx.fillText(letters[i], marginLeft + i * cell, marginTop + innerSize + 15);
-  }
+    // コメント描画
+    function drawComments(ctx, canvasWidth, canvasHeight) {
+      const topText = document.getElementById("commentTop").value;
+      const bottomText = document.getElementById("commentBottom").value;
 
-  ctx.textAlign = "right";
-  ctx.textBaseline = "middle";
-  for (let i = 0; i < size; i++) {
-    ctx.fillText(size - i, marginLeft - 5, marginTop + i * cell + cell / 2 - 15);
-  }
+      ctx.font = "16px sans-serif";
+      ctx.fillStyle = "black";
 
-  // 石描画
-  moves.forEach((m) => {
-    const cx = marginLeft + m.x * cell;
-    const cy = marginTop + (size - 1 - m.y) * cell;
+      if (topText.trim() !== "") {
+        ctx.textAlign = "center";
+        const lines = topText.split("\n");
+        lines.forEach((line, i) => {
+          ctx.fillText(line, canvasWidth / 2, 25 + i * 20);
+        });
+      }
 
-    ctx.beginPath();
-    ctx.arc(cx, cy, 12, 0, Math.PI * 2);
-    ctx.fillStyle = m.color === "black" ? "black" : "white";
-    ctx.fill();
-    ctx.stroke();
+      if (bottomText.trim() !== "") {
+        ctx.textAlign = "left";
+        const lines = bottomText.split("\n");
+        const startY = marginTop + (size * cell) + 5;
+        lines.forEach((line, i) => {
+          ctx.fillText(line, marginLeft, startY + i * 20);
+        });
+      }
+    }
 
-    if (m.number !== null) { // 通常モードの石だけ番号を描画
-      ctx.fillStyle = m.color === "black" ? "white" : "black";
-      ctx.font = "bold 12px sans-serif";
+    // --- 盤描画 ---
+    function renderBoard() {
+      const innerSize = (size - 1) * cell;
+      const boardSize = size * cell;
+      const canvasWidth  = marginLeft + boardSize + marginRight;
+      const canvasHeight = marginTop + boardSize + marginBottom;
+
+      const canvas = document.createElement("canvas");
+      canvas.width = canvasWidth;
+      canvas.height = canvasHeight;
+      const ctx = canvas.getContext("2d");
+
+      ctx.fillStyle = "#F9EBCF";
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+      ctx.strokeStyle = "black";
+      ctx.lineWidth = 1;
+      for (let i = 1; i < size - 1; i++) {
+        const x = marginLeft + i * cell + 0.5;
+        ctx.beginPath();
+        ctx.moveTo(x, marginTop);
+        ctx.lineTo(x, marginTop + innerSize);
+        ctx.stroke();
+      }
+      for (let i = 1; i < size - 1; i++) {
+        const y = marginTop + i * cell + 0.5;
+        ctx.beginPath();
+        ctx.moveTo(marginLeft, y);
+        ctx.lineTo(marginLeft + innerSize, y);
+        ctx.stroke();
+      }
+
+      ctx.lineWidth = 2;
+      ctx.strokeRect(marginLeft + 0.5, marginTop + 0.5, innerSize, innerSize);
+
+      drawCoordinates(ctx, canvas.width, canvas.height, innerSize);
+      drawStars(ctx);
+
+      moves.forEach((m) => {
+        const cx = marginLeft + m.x * cell;
+        const cy = marginTop + (size - 1 - m.y) * cell;
+
+        ctx.beginPath();
+        ctx.arc(cx, cy, 12, 0, Math.PI * 2);
+        ctx.fillStyle = m.color === "black" ? "black" : "white";
+        ctx.fill();
+        ctx.stroke();
+
+        if (m.number !== null) {
+          ctx.fillStyle = m.color === "black" ? "white" : "black";
+          ctx.font = "bold 12px sans-serif";
+          ctx.textAlign = "center";
+          ctx.textBaseline = "middle";
+          ctx.fillText(m.number, cx, cy);
+        }
+      });
+
+      // ★ 修正: ラベル描画（背景で線を消す）
+      ctx.font = "bold 14px sans-serif";
       ctx.textAlign = "center";
       ctx.textBaseline = "middle";
-      ctx.fillText(m.number, cx, cy);
-    }
-  });
+      labels.forEach(l => {
+        const cx = marginLeft + l.x * cell;
+        const cy = marginTop + (size - 1 - l.y) * cell;
 
-  // イベント
-  canvas.oncontextmenu = e => e.preventDefault();
-  canvas.addEventListener("click", e => handleClick(e, "left"));
-  canvas.addEventListener("contextmenu", e => handleClick(e, "right"));
+        ctx.fillStyle = "#F9EBCF";
+        ctx.fillRect(cx - cell/2 + 1, cy - cell/2 + 1, cell - 2, cell - 2);
 
-  const container = document.getElementById("board");
-  container.innerHTML = "";
-  container.appendChild(canvas);
+        ctx.fillStyle = "red";
+        ctx.fillText(l.text, cx, cy);
+      });
 
-  // --- 棋譜文字列を出力 ---
-  const letters2 = "abcdefghijklmno";
-  const kifu = moves
-    .filter(m => m.number !== null)
-    .sort((a, b) => a.number - b.number)
-    .map(m => letters2[m.x] + (m.y + 1))
-    .join("");
-  const textarea = document.getElementById("kifuInput");
-  if (textarea && textarea.value !== kifu) {
-    textarea.value = kifu;
-  }
-}
+      drawComments(ctx, canvas.width, canvas.height);
 
-// --- クリック処理 ---
-function handleClick(e, button) {
-  const rect = e.target.getBoundingClientRect();
-  const x = Math.round((e.clientX - rect.left - marginLeft) / cell);
-  const y = size - 1 - Math.round((e.clientY - rect.top - marginTop) / cell);
+      canvas.oncontextmenu = e => e.preventDefault();
+      canvas.addEventListener("click", e => handleClick(e, "left"));
+      canvas.addEventListener("contextmenu", e => handleClick(e, "right"));
 
-  if (x < 0 || y < 0 || x >= size || y >= size) return;
+      const container = document.getElementById("board");
+      container.innerHTML = "";
+      container.appendChild(canvas);
 
-  if (freeMode) {
-    // 自由配置
-    if (button === "left") {
-      if (boardState[y][x] === "black") {
-        boardState[y][x] = null;
-        moves = moves.filter(m => !(m.x === x && m.y === y));
-      } else {
-        boardState[y][x] = "black";
-        moves.push({ x, y, color: "black", number: null });
-      }
-    } else if (button === "right") {
-      if (boardState[y][x] === "white") {
-        boardState[y][x] = null;
-        moves = moves.filter(m => !(m.x === x && m.y === y));
-      } else {
-        boardState[y][x] = "white";
-        moves.push({ x, y, color: "white", number: null });
+      const letters2 = "abcdefghijklmno";
+      const kifu = moves
+        .filter(m => m.number !== null)
+        .sort((a, b) => a.number - b.number)
+        .map(m => letters2[m.x] + (m.y + 1))
+        .join("");
+      const textarea = document.getElementById("kifuInput");
+      if (textarea && textarea.value !== kifu) {
+        textarea.value = kifu;
       }
     }
-  } else {
-    // 通常モード
-    if (button === "left") {
-      if (boardState[y][x]) return;
-      const color = blackTurn ? "black" : "white";
-      const moveNumber = moves.filter(m => m.number !== null).length + 1;
-      boardState[y][x] = color;
-      moves.push({ x, y, color, number: moveNumber });
-      blackTurn = !blackTurn;
-    } else if (button === "right") {
-      // 手戻し
-      const last = moves.pop();
-      if (last) {
-        boardState[last.y][last.x] = null;
-        if (last.number !== null) {
-          blackTurn = (last.color === "black");
+
+    // --- クリック処理 ---
+    function handleClick(e, button) {
+      const rect = e.target.getBoundingClientRect();
+      const x = Math.round((e.clientX - rect.left - marginLeft) / cell);
+      const y = size - 1 - Math.round((e.clientY - rect.top - marginTop) / cell);
+
+      if (x < 0 || y < 0 || x >= size || y >= size) return;
+
+      // ★ 追加: ラベル入力
+      if (document.getElementById("inputNumber").checked) {
+        labels.push({ x, y, text: String(nextNumber++) });
+        renderBoard();
+        return;
+      }
+      if (document.getElementById("inputAlpha").checked) {
+        labels.push({ x, y, text: String.fromCharCode(nextAlphaCode++) });
+        renderBoard();
+        return;
+      }
+
+      if (freeMode) {
+        if (button === "left") {
+          if (boardState[y][x] === "black") {
+            boardState[y][x] = null;
+            moves = moves.filter(m => !(m.x === x && m.y === y));
+          } else {
+            boardState[y][x] = "black";
+            moves.push({ x, y, color: "black", number: null });
+          }
+        } else if (button === "right") {
+          if (boardState[y][x] === "white") {
+            boardState[y][x] = null;
+            moves = moves.filter(m => !(m.x === x && m.y === y));
+          } else {
+            boardState[y][x] = "white";
+            moves.push({ x, y, color: "white", number: null });
+          }
+        }
+      } else {
+        if (button === "left") {
+          if (boardState[y][x]) return;
+          const color = blackTurn ? "black" : "white";
+          const moveNumber = moves.filter(m => m.number !== null).length + 1;
+          boardState[y][x] = color;
+          moves.push({ x, y, color, number: moveNumber });
+          blackTurn = !blackTurn;
+        } else if (button === "right") {
+          const last = moves.pop();
+          if (last) {
+            boardState[last.y][last.x] = null;
+            if (last.number !== null) {
+              blackTurn = (last.color === "black");
+            }
+          }
         }
       }
-    }
-  }
-  renderBoard();
-}
-
-// --- 棋譜入力の即時反映 ---
-document.getElementById("kifuInput").addEventListener("input", e => {
-  const input = e.target.value.trim();
-  moves = [];
-  boardState = Array.from({ length: size }, () => Array(size).fill(null));
-
-  const letters = "abcdefghijklmno";
-  let turn = true; // 黒から
-
-  // [a-o][1-9][0-5]? → a1〜o15 をマッチ
-  const regex = /([a-o])([1-9][0-5]?)/gi;
-  let match;
-  while ((match = regex.exec(input)) !== null) {
-    const x = letters.indexOf(match[1].toLowerCase());
-    const y = parseInt(match[2], 10) - 1;
-    if (x < 0 || y < 0 || x >= size || y >= size) continue;
-
-    const color = turn ? "black" : "white";
-    boardState[y][x] = color;
-    moves.push({ x, y, color, number: moves.length + 1 });
-    turn = !turn;
-  }
-
-  blackTurn = turn;
-  renderBoard();
-});
-
-
-   // --- モード切替 ---
-document.getElementById("toggleModeBtn").addEventListener("click", () => {
-  freeMode = !freeMode;
-  document.getElementById("toggleModeBtn").textContent =
-    freeMode ? "通常モードに切替" : "自由配置モードに切替";
-
-  if (!freeMode) {
-    // ラジオボタンの値を参照して黒番開始/白番開始を反映
-    const startColor = document.querySelector("input[name='startColor']:checked").value;
-    blackTurn = (startColor === "black");
-  }
-  renderBoard();
-});
-
-// --- ラジオボタンのイベント ---
-document.querySelectorAll("input[name='startColor']").forEach(radio => {
-  radio.addEventListener("change", () => {
-    // まだ通常モードで石を打っていなければ即反映
-    const hasNumberedMoves = moves.some(m => m.number !== null);
-    if (!hasNumberedMoves && !freeMode) {
-      blackTurn = (radio.value === "black");
       renderBoard();
     }
-  });
-});
 
+    // ★ 追加: 削除ボタン
+    document.getElementById("clearLabels").addEventListener("click", () => {
+      labels = [];
+      nextNumber = 1;
+      nextAlphaCode = "A".charCodeAt(0);
+      renderBoard();
+    });
 
     // --- PNG保存 ---
     document.getElementById("saveBoardPng").addEventListener("click", () => {
-      const canvas = document.querySelector("#board canvas");
+      const tempCanvas = renderBoardForGif(moves); // 全着手
       const link = document.createElement("a");
-      link.href = canvas.toDataURL("image/png");
+      link.href = tempCanvas.toDataURL("image/png");
       link.download = "board.png";
       link.click();
     });
 
+    // --- GIF保存 ---
+    document.getElementById("saveGifBtn").addEventListener("click", () => {
+      const intervalSec   = parseFloat(document.getElementById("gifInterval").value) || 0.5;
+      const firstDelaySec = parseFloat(document.getElementById("gifFirstDelay").value) || intervalSec;
+      const lastDelaySec  = parseFloat(document.getElementById("gifLastDelay").value) || intervalSec;
+      const startMove     = parseInt(document.getElementById("gifStartMove").value) || 1;
 
+      const interval   = intervalSec * 1000;
+      const firstDelay = firstDelaySec * 1000;
+      const lastDelay  = lastDelaySec * 1000;
 
-   // --- GIF保存 ---
-document.getElementById("saveGifBtn").addEventListener("click", () => {
-  // 入力値を「秒」で受け取る
-  const intervalSec   = parseFloat(document.getElementById("gifInterval").value) || 0.5;
-  const firstDelaySec = parseFloat(document.getElementById("gifFirstDelay").value) || intervalSec;
-  const lastDelaySec  = parseFloat(document.getElementById("gifLastDelay").value) || intervalSec;
-  const startMove     = parseInt(document.getElementById("gifStartMove").value) || 1;
+      const gif = new GIF({ workers: 2, quality: 10 });
 
-  // 秒 → ミリ秒に変換
-  const interval   = intervalSec * 1000;
-  const firstDelay = firstDelaySec * 1000;
-  const lastDelay  = lastDelaySec * 1000;
+      const baseMoves = moves.filter(m => m.number === null || m.number < startMove);
+      gif.addFrame(renderBoardForGif(baseMoves), { delay: firstDelay });
 
-  const gif = new GIF({ workers: 2, quality: 10 });
+      for (let i = startMove; i <= moves.length; i++) {
+        const tempMoves = moves.filter(m => m.number === null || m.number <= i);
+        gif.addFrame(renderBoardForGif(tempMoves), { delay: (i === moves.length ? lastDelay : interval) });
+      }
 
-  // 開始手数以前の盤面を1フレームで保持
-  const baseMoves = moves.filter(m => m.number === null || m.number < startMove);
-  gif.addFrame(renderBoardForGif(baseMoves), { delay: firstDelay });
+      gif.on("finished", blob => {
+        const link = document.createElement("a");
+        link.href = URL.createObjectURL(blob);
+        link.download = "board.gif";
+        link.click();
+      });
+      gif.render();
+    });
 
-  for (let i = startMove; i <= moves.length; i++) {
-    const tempMoves = moves.filter(m => m.number === null || m.number <= i);
-    gif.addFrame(renderBoardForGif(tempMoves), { delay: (i === moves.length ? lastDelay : interval) });
-  }
+    // --- GIF/PNG共通描画 ---
+    function renderBoardForGif(movesSubset) {
+      const innerSize = (size - 1) * cell;
+      const boardSize = size * cell;
+      const canvasWidth  = marginLeft + boardSize + marginRight;
+      const canvasHeight = marginTop + boardSize + marginBottom;
 
-  gif.on("finished", blob => {
-    const link = document.createElement("a");
-    link.href = URL.createObjectURL(blob);
-    link.download = "board.gif";
-    link.click();
-  });
-  gif.render();
-});
+      const canvas = document.createElement("canvas");
+      canvas.width = canvasWidth;
+      canvas.height = canvasHeight;
+      const ctx = canvas.getContext("2d");
 
+      ctx.fillStyle = "#F9EBCF";
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
 
+      ctx.strokeStyle = "black";
+      ctx.lineWidth = 1;
+      for (let i = 1; i < size - 1; i++) {
+        const x = marginLeft + i * cell + 0.5;
+        ctx.beginPath();
+        ctx.moveTo(x, marginTop);
+        ctx.lineTo(x, marginTop + innerSize);
+        ctx.stroke();
+      }
+      for (let i = 1; i < size - 1; i++) {
+        const y = marginTop + i * cell + 0.5;
+        ctx.beginPath();
+        ctx.moveTo(marginLeft, y);
+        ctx.lineTo(marginLeft + innerSize, y);
+        ctx.stroke();
+      }
 
+      ctx.lineWidth = 2;
+      ctx.strokeRect(marginLeft + 0.5, marginTop + 0.5, innerSize, innerSize);
 
-// --- GIF用描画関数 ---
-function renderBoardForGif(movesSubset) {
-  const innerSize = (size - 1) * cell;
-  const boardSize = size * cell;
-  const canvasWidth  = marginLeft + boardSize + marginRight;
-  const canvasHeight = marginTop + boardSize + marginBottom;
+      drawCoordinates(ctx, canvas.width, canvas.height, innerSize);
+      drawStars(ctx);
 
-  const canvas = document.createElement("canvas");
-  canvas.width = canvasWidth;
-  canvas.height = canvasHeight;
-  const ctx = canvas.getContext("2d");
+      movesSubset.forEach(m => {
+        const cx = marginLeft + m.x * cell;
+        const cy = marginTop + (size - 1 - m.y) * cell;
 
-  // 背景
-  ctx.fillStyle = "#F9EBCF";
-  ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.beginPath();
+        ctx.arc(cx, cy, 12, 0, Math.PI * 2);
+        ctx.fillStyle = m.color === "black" ? "black" : "white";
+        ctx.fill();
+        ctx.stroke();
 
-  // 内側の細線
-  ctx.strokeStyle = "black";
-  ctx.lineWidth = 1;
-  for (let i = 1; i < size - 1; i++) {
-    const x = marginLeft + i * cell + 0.5;
-    ctx.beginPath();
-    ctx.moveTo(x, marginTop);
-    ctx.lineTo(x, marginTop + innerSize);
-    ctx.stroke();
-  }
-  for (let i = 1; i < size - 1; i++) {
-    const y = marginTop + i * cell + 0.5;
-    ctx.beginPath();
-    ctx.moveTo(marginLeft, y);
-    ctx.lineTo(marginLeft + innerSize, y);
-    ctx.stroke();
-  }
+        if (m.number !== null) {
+          ctx.fillStyle = m.color === "black" ? "white" : "black";
+          ctx.font = "bold 12px sans-serif";
+          ctx.textAlign = "center";
+          ctx.textBaseline = "middle";
+          ctx.fillText(m.number, cx, cy);
+        }
+      });
 
-  // 外枠
-  ctx.lineWidth = 2;
-  ctx.strokeRect(marginLeft + 0.5, marginTop + 0.5, innerSize, innerSize);
-
-  // 石描画
-  movesSubset.forEach(m => {
-    const cx = marginLeft + m.x * cell;
-    const cy = marginTop + (size - 1 - m.y) * cell;
-
-    ctx.beginPath();
-    ctx.arc(cx, cy, 12, 0, Math.PI * 2);
-    ctx.fillStyle = m.color === "black" ? "black" : "white";
-    ctx.fill();
-    ctx.stroke();
-
-    if (m.number !== null) {
-      ctx.fillStyle = m.color === "black" ? "white" : "black";
-      ctx.font = "bold 12px sans-serif";
+      // ★ 修正: ラベル描画（保存にも反映）
+      ctx.font = "bold 14px sans-serif";
       ctx.textAlign = "center";
       ctx.textBaseline = "middle";
-      ctx.fillText(m.number, cx, cy);
+      labels.forEach(l => {
+        const cx = marginLeft + l.x * cell;
+        const cy = marginTop + (size - 1 - l.y) * cell;
+
+        ctx.fillStyle = "#F9EBCF";
+        ctx.fillRect(cx - cell/2 + 1, cy - cell/2 + 1, cell - 2, cell - 2);
+
+        ctx.fillStyle = "red";
+        ctx.fillText(l.text, cx, cy);
+      });
+
+      drawComments(ctx, canvas.width, canvas.height);
+
+      return canvas;
     }
-  });
 
-  return canvas;
-}
+    // 初期描画
+    renderBoard();
 
-// --- 初期描画 ---
-renderBoard();
+    // --- モード切替 ---
+    document.getElementById("toggleModeBtn").addEventListener("click", () => {
+      freeMode = !freeMode;
+      document.getElementById("toggleModeBtn").textContent =
+        freeMode ? "通常モードに切替" : "自由配置モードに切替";
+
+      if (!freeMode) {
+        const startColor = document.querySelector("input[name='startColor']:checked").value;
+        blackTurn = (startColor === "black");
+      }
+      renderBoard();
+    });
 
   </script>
 </body>
 </html>
-
