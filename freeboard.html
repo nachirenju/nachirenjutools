@@ -27,8 +27,6 @@
   二回クリックすると石が消えます。
   <div id="controls">
     <button id="toggleModeBtn">自由配置モードに切替</button>
-    <label><input type="radio" name="startColor" value="black" checked> 黒番開始</label>
-    <label><input type="radio" name="startColor" value="white"> 白番開始</label>
     <button id="saveBoardPng">PNG保存</button>
     <button id="saveGifBtn">GIF保存</button>
     <br>
@@ -654,11 +652,24 @@ placeWhite.addEventListener("change", () => {
   }
 });
 
-// 自由配置モード切り替え時に表示・非表示
+// 自由配置モード切替（1か所にまとめる）
 const toggleBtn = document.getElementById("toggleModeBtn");
 toggleBtn.addEventListener("click", () => {
   freeMode = !freeMode;
-  toggleBtn.textContent = freeMode ? "通常モードに切替" : "自由配置モードに切替";
+
+  if (!freeMode) {
+    // ★ 通常モードに戻るときに確認
+    const start = confirm("黒番から打ち始めますか？（キャンセルすると白番開始）");
+    blackTurn = start ? true : false;
+
+  
+  }
+
+  // ラベル更新（必ず毎回反映される）
+  toggleBtn.innerText = freeMode ? "通常モードに切替" : "自由配置モードに切替";
+
+
+  // 自由配置専用UIの表示切替
   document.getElementById("freeModeControls").style.display = freeMode ? "block" : "none";
   if (!freeMode) {
     placeBlack.checked = false;
@@ -667,9 +678,7 @@ toggleBtn.addEventListener("click", () => {
 });
 
 
-
   </script>  
 </body>
 </html>
-
 
