@@ -201,10 +201,11 @@
 <!-- 盤面保存ボタン -->
   <!-- モード選択 -->
 <div style="margin:10px 0;">
-  <label><input type="radio" name="pngMode" value="board" checked>盤面のみ</label>
+  <label><input type="radio" name="pngMode" value="board">盤面のみ</label>
   <label><input type="radio" name="pngMode" value="withLabel">盤面＋座標</label>
-  <label><input type="radio" name="pngMode" value="full">盤面＋座標＋対局者＋swap</label>
+  <label><input type="radio" name="pngMode" value="full" checked>盤面＋座標＋対局者＋swap</label>
 </div>
+
 <button id="saveBoardPng">PNGで保存</button>
 </div>
 <div id="currentKifu"
@@ -216,9 +217,9 @@
 <div id="gifControls" style="margin-top:10px; text-align:center;">
   <h3>GIF保存</h3>
   開始手数: <input id="gifStartMove" type="number" value="0" min="0">
-  <label><input type="radio" name="gifMode" value="board" checked> 盤面のみ</label>
+  <label><input type="radio" name="gifMode" value="board"> 盤面のみ</label>
   <label><input type="radio" name="gifMode" value="boardCoords"> 盤面＋座標</label>
-  <label><input type="radio" name="gifMode" value="full"> 盤面＋座標＋対局者情報</label>
+  <label><input type="radio" name="gifMode" value="full" checked> 盤面＋座標＋対局者情報</label>
   <br>
   <label>更新間隔（秒）:
     <input type="number" id="gifInterval" value="1" step="0.1" style="width:60px;">
@@ -948,7 +949,9 @@ function drawStars(ctx, marginLeft, marginTop, cell, size) {
 }
 
 
-function renderBoardForGif(moves, mode) {
+
+function renderBoardForGif(moves, mode, bresult, isLastFrame = false) {
+
   const size = 15;
   const cell = 30;
   const marginLeft = 25;   // 左余白（数字）
@@ -1089,6 +1092,24 @@ if (mode === "full" && currentGame) {
     ctx.fillText(`      ${secondLine}`, 10, marginTop + innerSize + 95);
   }
 }
+
+ if (isLastFrame && typeof bresult !== "undefined") {
+  const n = moves.length;
+  const isEven = n % 2 === 0;
+  let prefix = isEven ? "〇" : "●";
+  let resultText = "";
+
+  if (bresult === 1) resultText = "白投了";
+  else if (bresult === 0) resultText = "黒投了";
+  else if (bresult === 0.5) resultText = "満局";
+
+  ctx.fillStyle = "black";
+  ctx.font = "bold 15px sans-serif";
+  ctx.textAlign = "right";   // ←右寄せ
+  const rightX = marginLeft + innerSize;
+  ctx.fillText(`${prefix}${n} にて ${resultText}`, rightX, marginTop + innerSize + 40);
+}
+
 
 
   return canvas;
@@ -2274,22 +2295,32 @@ document.getElementById("saveGifBtn").addEventListener("click", async () => {
     quality: 20,
   });
 
+  // ★ 現在の対局の結果を取得
+  const gameResult = currentGame?.bresult ?? null;
+
   // ★ 開始盤面を最初のフレームに追加
   if (startMove > 0) {
-    const startCanvas = renderBoardForGif(currentMoves.slice(0, startMove), mode);
+    const startCanvas = renderBoardForGif(
+      currentMoves.slice(0, startMove),
+      mode,
+      gameResult,
+      false // 開始盤面は結果なし
+    );
     gif.addFrame(startCanvas, { delay: interval * 1000 });
     console.log(`開始盤面（${startMove}手目まで）を追加`);
   }
 
   // ★ startMove+1 手目から最後まで進める
   for (let i = startMove + 1; i <= currentMoves.length; i++) {
-    const canvas = renderBoardForGif(currentMoves.slice(0, i), mode);
+    const isLast = i === currentMoves.length;
+    const canvas = renderBoardForGif(
+      currentMoves.slice(0, i),
+      mode,
+      gameResult, // ← currentGame の bresult を渡す
+      isLast
+    );
 
-    // 最終フレームなら lastDelay
-    const delay = (i === currentMoves.length)
-      ? lastDelay * 1000
-      : interval * 1000;
-
+    const delay = isLast ? lastDelay * 1000 : interval * 1000;
     gif.addFrame(canvas, { delay: delay });
     console.log(`フレーム ${i}/${currentMoves.length} 追加 (delay=${delay}ms)`);
   }
@@ -2303,6 +2334,8 @@ document.getElementById("saveGifBtn").addEventListener("click", async () => {
 
   gif.render();
 });
+
+
 
 
 // 盤面PNG保存ボタン処理
@@ -2348,4 +2381,3 @@ document.getElementById("toggleMoveNumbers").addEventListener("click", () => {
 </script>
 </body>
 </html>
-
