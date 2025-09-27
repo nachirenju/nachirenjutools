@@ -8,6 +8,10 @@
     #controls { margin: 10px 0; }
     canvas { border: 1px solid #ccc; }
     label { margin-right: 10px; }
+    button {
+  touch-action: manipulation; /* ダブルタップでの拡大を防ぐ */
+}
+    
   </style>
 </head>
 <body>
@@ -667,4 +671,5 @@ toggleBtn.addEventListener("click", () => {
   </script>  
 </body>
 </html>
+
 
