@@ -278,7 +278,7 @@ function handleClick(e, button) {
 
     // --- PNG保存 ---
     document.getElementById("saveBoardPng").addEventListener("click", () => {
-      const tempCanvas = renderBoardForGif(moves); // 全着手
+       const tempCanvas = renderBoardForGif(moves, { labels: labels });
       const link = document.createElement("a");
       link.href = tempCanvas.toDataURL("image/png");
       link.download = "board.png";
@@ -862,17 +862,23 @@ function renderBoardCrop(movesSubset, labelsSubset, minX, maxX, minY, maxY) {
     }
   });
 
-  // ラベル
-  ctx.font = "bold 14px sans-serif";
-  ctx.textAlign = "center";
-  ctx.textBaseline = "middle";
-  labelsSubset.forEach(l => {
-    if (l.x < minX || l.x > maxX || l.y < minY || l.y > maxY) return;
-    const cx = marginL + (l.x - minX) * cell;
-    const cy = marginT + (maxY - l.y) * cell;
-    ctx.fillStyle = "red";
-    ctx.fillText(l.text, cx, cy);
-  });
+// ラベル
+ctx.font = "bold 14px sans-serif";
+ctx.textAlign = "center";
+ctx.textBaseline = "middle";
+labelsSubset.forEach(l => {
+  if (l.x < minX || l.x > maxX || l.y < minY || l.y > maxY) return;
+  const cx = marginL + (l.x - minX) * cell;
+  const cy = marginT + (maxY - l.y) * cell;
+
+  // 背景で線を消す
+  ctx.fillStyle = "#F9EBCF";
+  ctx.fillRect(cx - cell/2 + 1, cy - cell/2 + 1, cell - 2, cell - 2);
+
+  ctx.fillStyle = "red";
+  ctx.fillText(l.text, cx, cy);
+});
+
 
   // 座標表示（オプション）
   if (document.getElementById("showCoordinates").checked) {
@@ -895,5 +901,3 @@ function renderBoardCrop(movesSubset, labelsSubset, minX, maxX, minY, maxY) {
 
   return canvas;
 }
-
-
