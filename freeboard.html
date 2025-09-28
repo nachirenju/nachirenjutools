@@ -37,6 +37,25 @@
   <div id="controls">
     <button id="toggleModeBtn">自由配置モードに切替</button>
     <button id="saveBoardPng">PNG保存</button>
+<button id="saveBoardCropBtn">PNG指定範囲保存</button>
+<!-- PNGプレビューポップアップ -->
+<div id="pngPreviewPopup" style="display:none;
+  position:fixed; top:10%; left:20%; width:60%;
+  background:#fff; border:2px solid #333; padding:15px;
+  z-index:2100; box-shadow:0 0 15px rgba(0,0,0,0.5); text-align:center;">
+  <h3>PNGプレビュー（指定範囲）</h3>
+  <div id="pngPreviewContent" style="margin-top:10px;"></div>
+  <br>
+  <label>余白(路数): 
+  <input type="number" id="cropMargin" value="2" min="0" max="5">
+</label>
+  <button id="downloadCropPngBtn">保存</button>
+  <button id="closePngPreview">閉じる</button>
+</div>
+
+
+
+
     <!-- ★ GIF保存詳細設定ポップアップ -->
 <button id="gifSettingsBtn">GIF保存詳細設定</button>
 <div id="gifSettingsPopup">
@@ -833,6 +852,139 @@ toggleBtn.addEventListener("click", () => {
   }
 });
 
+// --- PNG指定範囲保存（プレビューを表示） ---
+document.getElementById("saveBoardCropBtn").addEventListener("click", () => {
+  updateCropPreview();
+  document.getElementById("pngPreviewPopup").style.display = "block";
+});
+
+// --- プレビュー更新関数 ---
+function updateCropPreview() {
+  const marginRoutes = parseInt(document.getElementById("cropMargin").value) || 2;
+
+  // 石とラベルの最小/最大座標を探索
+  let xs = [], ys = [];
+  moves.forEach(m => { xs.push(m.x); ys.push(m.y); });
+  labels.forEach(l => { xs.push(l.x); ys.push(l.y); });
+
+  if (xs.length === 0 || ys.length === 0) {
+    const content = document.getElementById("pngPreviewContent");
+    content.innerHTML = "<p>石や文字がありません</p>";
+    return;
+  }
+
+  let minX = Math.max(0, Math.min(...xs) - marginRoutes);
+  let maxX = Math.min(size - 1, Math.max(...xs) + marginRoutes);
+  let minY = Math.max(0, Math.min(...ys) - marginRoutes);
+  let maxY = Math.min(size - 1, Math.max(...ys) + marginRoutes);
+
+  // 描画範囲
+  const croppedCanvas = renderBoardCrop(moves, labels, minX, maxX, minY, maxY);
+
+  // プレビュー表示
+  const content = document.getElementById("pngPreviewContent");
+  content.innerHTML = "";
+  content.appendChild(croppedCanvas);
+
+  // 保存ボタン処理を更新
+  document.getElementById("downloadCropPngBtn").onclick = () => {
+    const link = document.createElement("a");
+    link.href = croppedCanvas.toDataURL("image/png");
+    link.download = "board_crop.png";
+    link.click();
+  };
+}
+
+// --- 余白の数値が変わったら即プレビュー更新 ---
+document.getElementById("cropMargin").addEventListener("input", updateCropPreview);
+
+// 閉じるボタン
+document.getElementById("closePngPreview").addEventListener("click", () => {
+  document.getElementById("pngPreviewPopup").style.display = "none";
+});
+
+
+// --- 指定範囲のみ描画する関数 ---
+function renderBoardCrop(movesSubset, labelsSubset, minX, maxX, minY, maxY) {
+  const innerSizeX = (maxX - minX) * cell;
+  const innerSizeY = (maxY - minY) * cell;
+  const canvasWidth  = innerSizeX + marginLeft + marginRight;
+  const canvasHeight = innerSizeY + marginTop + marginBottom;
+
+  const canvas = document.createElement("canvas");
+  canvas.width = canvasWidth;
+  canvas.height = canvasHeight;
+  const ctx = canvas.getContext("2d");
+
+  // 背景
+  ctx.fillStyle = "#F9EBCF";
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+  // 格子線
+  ctx.strokeStyle = "black";
+  ctx.lineWidth = 1;
+  for (let i = minX; i <= maxX; i++) {
+    const x = marginLeft + (i - minX) * cell + 0.5;
+    ctx.beginPath();
+    ctx.moveTo(x, marginTop);
+    ctx.lineTo(x, marginTop + innerSizeY);
+    ctx.stroke();
+  }
+  for (let j = minY; j <= maxY; j++) {
+    const y = marginTop + (j - minY) * cell + 0.5;
+    ctx.beginPath();
+    ctx.moveTo(marginLeft, y);
+    ctx.lineTo(marginLeft + innerSizeX, y);
+    ctx.stroke();
+  }
+
+  // 外枠
+  ctx.lineWidth = 2;
+  ctx.strokeRect(marginLeft + 0.5, marginTop + 0.5, innerSizeX, innerSizeY);
+
+  // 石
+  movesSubset.forEach(m => {
+    if (m.x < minX || m.x > maxX || m.y < minY || m.y > maxY) return;
+    const cx = marginLeft + (m.x - minX) * cell;
+    const cy = marginTop + (maxY - m.y) * cell;
+
+    ctx.beginPath();
+    ctx.arc(cx, cy, 12, 0, Math.PI * 2);
+    ctx.fillStyle = m.color === "black" ? "black" : "white";
+    ctx.fill();
+    ctx.stroke();
+
+    if (m.number !== null) {
+      ctx.fillStyle = m.color === "black" ? "white" : "black";
+      ctx.font = "bold 12px sans-serif";
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillText(m.number, cx, cy);
+    }
+  });
+
+  // ラベル
+  ctx.font = "bold 14px sans-serif";
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  labelsSubset.forEach(l => {
+    if (l.x < minX || l.x > maxX || l.y < minY || l.y > maxY) return;
+    const cx = marginLeft + (l.x - minX) * cell;
+    const cy = marginTop + (maxY - l.y) * cell;
+
+    // 背景で格子を消してから描画
+    ctx.fillStyle = "#F9EBCF";
+    ctx.fillRect(cx - cell/2 + 1, cy - cell/2 + 1, cell - 2, cell - 2);
+
+    ctx.fillStyle = "red";
+    ctx.fillText(l.text, cx, cy);
+  });
+
+  // コメントも描画（既存の drawComments 再利用）
+  drawComments(ctx, canvas.width, canvas.height);
+
+  return canvas;
+}
 
 
 
