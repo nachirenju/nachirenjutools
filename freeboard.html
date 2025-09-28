@@ -8,10 +8,20 @@
     #controls { margin: 10px 0; }
     canvas { border: 1px solid #ccc; }
     label { margin-right: 10px; }
-    button {
-  touch-action: manipulation; /* ダブルタップでの拡大を防ぐ */
+
+    #gifSettingsPopup {
+  display: none;
+  position: fixed;
+  top: 20%;
+  left: 30%;
+  width: 40%;
+  background: #fff;
+  border: 2px solid #333;
+  padding: 15px;
+  z-index: 1000;
+  box-shadow: 0 0 10px rgba(0,0,0,0.3);
 }
-    
+
   </style>
 </head>
 <body>
@@ -23,41 +33,60 @@
   自由配置モードでは、<br>
   左クリック→黒石<br>
   右クリック→白石<br>
-※自由配置モードをスマホやタブレットで操作時、上記ではうまく動かないので黒石白石の配置チェックボックスをお使いください。
   二回クリックすると石が消えます。
   <div id="controls">
     <button id="toggleModeBtn">自由配置モードに切替</button>
+    <label><input type="radio" name="startColor" value="black" checked> 黒番開始</label>
+    <label><input type="radio" name="startColor" value="white"> 白番開始</label>
     <button id="saveBoardPng">PNG保存</button>
-    <button id="saveGifBtn">GIF保存</button>
+    <!-- ★ GIF保存詳細設定ポップアップ -->
+<button id="gifSettingsBtn">GIF保存詳細設定</button>
+<div id="gifSettingsPopup">
+  <h3>GIF保存詳細設定</h3>
+
+  <label>開始手数: <input type="number" id="gifStartMove" value="1" min="1"></label><br>
+  <label>更新間隔(秒): <input type="number" id="gifInterval" value="0.5" step="0.1"></label><br>
+  <label>最初フレーム静止(秒): <input type="number" id="gifFirstDelay" value="1" step="0.1"></label><br>
+  <label>最終フレーム静止(秒): <input type="number" id="gifLastDelay" value="2" step="0.1"></label><br><hr>
+
+  <label>・下記情報を最終フレームのみ反映</label><br>
+  <label><input type="checkbox" id="finalNumber"> 数字</label><br>
+  <label><input type="checkbox" id="finalAlpha"> アルファベット</label><br><hr>
+
+  上段コメント(最終フレーム):<br>
+  <textarea id="finalCommentTop" rows="2" style="width:95%;"></textarea><br>
+  下段コメント(最終フレーム):<br>
+  <textarea id="finalCommentBottom" rows="2" style="width:95%;"></textarea><br><br>
+
+
+  <button id="closeGifSettings">閉じる</button>
+</div>
+<button id="previewGifBtn">GIF保存</button>
+<!-- 最終フレームプレビューポップアップ -->
+<!-- GIF全体プレビューポップアップ -->
+<div id="gifPreviewPopup" style="display:none;
+  position:fixed; top:10%; left:20%; width:60%;
+  background:#fff; border:2px solid #333; padding:15px;
+  z-index:2000; box-shadow:0 0 15px rgba(0,0,0,0.5); text-align:center;">
+  <h3>GIFプレビュー</h3>
+  <div id="gifPreviewContent"></div>
+  <br>
+  <button id="saveGifBtn">保存</button>
+  <button id="closeGifPreview">閉じる</button>
+</div>
+
+
     <br>
     <!-- ★ 追加部分 -->
     <label><input type="checkbox" id="inputNumber"> 数字を入力</label>
     <label><input type="checkbox" id="inputAlpha"> アルファベットを入力</label>
     <button id="clearLabels">入力文字削除</button>
-    <br>
-    <!-- ★ ここまで追加 -->
-    <label>開始手数: <input type="number" id="gifStartMove" value="1" min="1"></label>
-    <label>更新間隔(秒): <input type="number" id="gifInterval" value="0.5" step="0.1"></label>
-    <label>最初フレーム静止(秒): <input type="number" id="gifFirstDelay" value="1" step="0.1"></label>
-    <label>最終フレーム静止(秒): <input type="number" id="gifLastDelay" value="2" step="0.1"></label>
     <br><button id="generateLinkBtn">リンク生成＆コピー</button>
     <br>
     <input type="text" id="generatedLink" readonly style="width:60%;">
   </div>
   <br>
   <div id="board"></div>
-  <div id="controls">
-  <button id="undoAllBtn">全て戻す</button>
-  <button id="undoBtn">一手戻す</button>
-  <button id="redoBtn">一手進める</button>
-  <button id="redoAllBtn">全て進める</button>
-</div>
-<div id="freeModeControls" style="display:none; margin-top:5px;">
-  <label><input type="checkbox" id="placeBlack"> 黒石配置モード</label>
-  <label><input type="checkbox" id="placeWhite"> 白石配置モード</label>
-</div>
-
-
   <div style="margin-top:10px; text-align:left;">
     <textarea id="kifuInput" rows="3"
               style="width:40%; font-family:monospace;"
@@ -254,94 +283,64 @@
       }
     }
 
-   // --- クリック処理 ---
-function handleClick(e, button) {
-  const rect = e.target.getBoundingClientRect();
-  const x = Math.round((e.clientX - rect.left - marginLeft) / cell);
-  const y = size - 1 - Math.round((e.clientY - rect.top - marginTop) / cell);
+    // --- クリック処理 ---
+    function handleClick(e, button) {
+      const rect = e.target.getBoundingClientRect();
+      const x = Math.round((e.clientX - rect.left - marginLeft) / cell);
+      const y = size - 1 - Math.round((e.clientY - rect.top - marginTop) / cell);
 
-  if (x < 0 || y < 0 || x >= size || y >= size) return;
+      if (x < 0 || y < 0 || x >= size || y >= size) return;
 
-  // ★ 追加: ラベル入力
-  if (document.getElementById("inputNumber").checked) {
-    labels.push({ x, y, text: String(nextNumber++) });
-    renderBoard();
-    return;
-  }
-  if (document.getElementById("inputAlpha").checked) {
-    labels.push({ x, y, text: String.fromCharCode(nextAlphaCode++) });
-    renderBoard();
-    return;
-  }
-
-  if (freeMode) {
-    // ★ チェックボックス優先
-    if (placeBlack.checked) {
-      if (boardState[y][x] === "black") {
-        boardState[y][x] = null;
-        moves = moves.filter(m => !(m.x === x && m.y === y));
-      } else {
-        boardState[y][x] = "black";
-        moves.push({ x, y, color: "black", number: null });
+      // ★ 追加: ラベル入力
+      if (document.getElementById("inputNumber").checked) {
+        labels.push({ x, y, text: String(nextNumber++) });
+        renderBoard();
+        return;
       }
-      renderBoard();
-      return;
-    }
-    if (placeWhite.checked) {
-      if (boardState[y][x] === "white") {
-        boardState[y][x] = null;
-        moves = moves.filter(m => !(m.x === x && m.y === y));
-      } else {
-        boardState[y][x] = "white";
-        moves.push({ x, y, color: "white", number: null });
+      if (document.getElementById("inputAlpha").checked) {
+        labels.push({ x, y, text: String.fromCharCode(nextAlphaCode++) });
+        renderBoard();
+        return;
       }
-      renderBoard();
-      return;
-    }
 
-    // ★ チェックなし → 従来の自由配置処理
-    if (button === "left") {
-      if (boardState[y][x] === "black") {
-        boardState[y][x] = null;
-        moves = moves.filter(m => !(m.x === x && m.y === y));
+      if (freeMode) {
+        if (button === "left") {
+          if (boardState[y][x] === "black") {
+            boardState[y][x] = null;
+            moves = moves.filter(m => !(m.x === x && m.y === y));
+          } else {
+            boardState[y][x] = "black";
+            moves.push({ x, y, color: "black", number: null });
+          }
+        } else if (button === "right") {
+          if (boardState[y][x] === "white") {
+            boardState[y][x] = null;
+            moves = moves.filter(m => !(m.x === x && m.y === y));
+          } else {
+            boardState[y][x] = "white";
+            moves.push({ x, y, color: "white", number: null });
+          }
+        }
       } else {
-        boardState[y][x] = "black";
-        moves.push({ x, y, color: "black", number: null });
-      }
-    } else if (button === "right") {
-      if (boardState[y][x] === "white") {
-        boardState[y][x] = null;
-        moves = moves.filter(m => !(m.x === x && m.y === y));
-      } else {
-        boardState[y][x] = "white";
-        moves.push({ x, y, color: "white", number: null });
-      }
-    }
-
-  } else {
-    // --- 通常モード ---
-    if (button === "left") {
-      if (boardState[y][x]) return;
-      const color = blackTurn ? "black" : "white";
-      const moveNumber = moves.filter(m => m.number !== null).length + 1;
-      boardState[y][x] = color;
-      moves.push({ x, y, color, number: moveNumber });
-      redoStack = [];  // ★ 新規着手で未来を消す
-      blackTurn = !blackTurn;
-    } else if (button === "right") {
-      const last = moves.pop();
-      if (last) {
-        boardState[last.y][last.x] = null;
-        if (last.number !== null) {
-          blackTurn = (last.color === "black");
+        if (button === "left") {
+          if (boardState[y][x]) return;
+          const color = blackTurn ? "black" : "white";
+          const moveNumber = moves.filter(m => m.number !== null).length + 1;
+          boardState[y][x] = color;
+          moves.push({ x, y, color, number: moveNumber });
+          blackTurn = !blackTurn;
+        } else if (button === "right") {
+          const last = moves.pop();
+          if (last) {
+            boardState[last.y][last.x] = null;
+            if (last.number !== null) {
+              blackTurn = (last.color === "black");
+            }
+          }
         }
       }
+      renderBoard();
     }
-  }
-
-  renderBoard();
-}
-
 
     // ★ 追加: 削除ボタン
     document.getElementById("clearLabels").addEventListener("click", () => {
@@ -360,38 +359,56 @@ function handleClick(e, button) {
       link.click();
     });
 
-    // --- GIF保存 ---
-    document.getElementById("saveGifBtn").addEventListener("click", () => {
-      const intervalSec   = parseFloat(document.getElementById("gifInterval").value) || 0.5;
-      const firstDelaySec = parseFloat(document.getElementById("gifFirstDelay").value) || intervalSec;
-      const lastDelaySec  = parseFloat(document.getElementById("gifLastDelay").value) || intervalSec;
-      const startMove     = parseInt(document.getElementById("gifStartMove").value) || 1;
+ // --- GIF保存 ---
+document.getElementById("saveGifBtn").addEventListener("click", () => {
+  const intervalSec   = parseFloat(document.getElementById("gifInterval").value) || 0.5;
+  const firstDelaySec = parseFloat(document.getElementById("gifFirstDelay").value) || intervalSec;
+  const lastDelaySec  = parseFloat(document.getElementById("gifLastDelay").value) || intervalSec;
+  const startMove     = parseInt(document.getElementById("gifStartMove").value) || 1;
 
-      const interval   = intervalSec * 1000;
-      const firstDelay = firstDelaySec * 1000;
-      const lastDelay  = lastDelaySec * 1000;
+  const finalNumber = document.getElementById("finalNumber").checked;
+  const finalAlpha = document.getElementById("finalAlpha").checked;
+  const finalCommentTop = document.getElementById("finalCommentTop").value;
+  const finalCommentBottom = document.getElementById("finalCommentBottom").value;
 
-      const gif = new GIF({ workers: 2, quality: 10 });
+  const interval   = intervalSec * 1000;
+  const firstDelay = firstDelaySec * 1000;
+  const lastDelay  = lastDelaySec * 1000;
 
-      const baseMoves = moves.filter(m => m.number === null || m.number < startMove);
-      gif.addFrame(renderBoardForGif(baseMoves), { delay: firstDelay });
+  const gif = new GIF({ workers: 2, quality: 10 });
 
-      for (let i = startMove; i <= moves.length; i++) {
-        const tempMoves = moves.filter(m => m.number === null || m.number <= i);
-        gif.addFrame(renderBoardForGif(tempMoves), { delay: (i === moves.length ? lastDelay : interval) });
-      }
+  // 1フレーム目
+  const baseMoves = moves.filter(m => m.number === null || m.number < startMove);
+  gif.addFrame(renderBoardForGif(baseMoves, {frameType:"normal"}), { delay: firstDelay });
 
-      gif.on("finished", blob => {
-        const link = document.createElement("a");
-        link.href = URL.createObjectURL(blob);
-        link.download = "board.gif";
-        link.click();
-      });
-      gif.render();
-    });
+  // メインループ
+  for (let i = startMove; i <= moves.length; i++) {
+    const tempMoves = moves.filter(m => m.number === null || m.number <= i);
+    const isFinal = (i === moves.length);
+
+    let extra = { frameType: isFinal ? "final" : "normal" };
+    if (isFinal) {
+      extra.finalNumber = finalNumber;
+      extra.finalAlpha = finalAlpha;
+      extra.finalTop = finalCommentTop;
+      extra.finalBottom = finalCommentBottom;
+    }
+
+    gif.addFrame(renderBoardForGif(tempMoves, extra), { delay: (isFinal ? lastDelay : interval) });
+  }
+
+  gif.on("finished", blob => {
+    const link = document.createElement("a");
+    link.href = URL.createObjectURL(blob);
+    link.download = "board.gif";
+    link.click();
+  });
+  gif.render();
+});
+
 
     // --- GIF/PNG共通描画 ---
-    function renderBoardForGif(movesSubset) {
+    function renderBoardForGif(movesSubset, extra = {}) {
       const innerSize = (size - 1) * cell;
       const boardSize = size * cell;
       const canvasWidth  = marginLeft + boardSize + marginRight;
@@ -447,22 +464,54 @@ function handleClick(e, button) {
         }
       });
 
-      // ラベルとコメントも描画
-      ctx.font = "bold 14px sans-serif";
-      ctx.textAlign = "center";
-      ctx.textBaseline = "middle";
-      labels.forEach(l => {
-        const cx = marginLeft + l.x * cell;
-        const cy = marginTop + (size - 1 - l.y) * cell;
-        ctx.fillStyle = "#F9EBCF";
-                ctx.fillRect(cx - cell/2 + 1, cy - cell/2 + 1, cell - 2, cell - 2);
-        ctx.fillStyle = "red";
-        ctx.fillText(l.text, cx, cy);
-      });
+    // --- ラベル描画 ---
+  ctx.font = "bold 14px sans-serif";
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
 
-      drawComments(ctx, canvas.width, canvas.height);
-      return canvas;
-    }  // ← ここで関数を閉じる
+  labels.forEach(l => {
+    const isNumber = !isNaN(l.text);
+    const isAlpha = /^[A-Z]$/.test(l.text);
+
+    // 最終フレームで「finalNumber/Alpha」が選ばれていたら、その条件に合わないものは描画しない
+    if (extra.frameType === "final") {
+      if (isNumber && !extra.finalNumber) return;
+      if (isAlpha && !extra.finalAlpha) return;
+    } else {
+      // 通常フレームでは数字・アルファは描画しない
+      if (isNumber || isAlpha) return;
+    }
+
+    const cx = marginLeft + l.x * cell;
+    const cy = marginTop + (size - 1 - l.y) * cell;
+    ctx.fillStyle = "red";
+    ctx.fillText(l.text, cx, cy);
+  });
+
+  // コメント
+// コメント
+drawComments(ctx, canvas.width, canvas.height);
+
+// ★ 最終フレーム専用コメント
+if (extra.frameType === "final") {
+  ctx.fillStyle = "black";   // テストで赤にしてみる
+
+  if (extra.finalTop) {
+    ctx.font = "18px sans-serif";
+    ctx.textAlign = "center";
+    ctx.fillText(extra.finalTop, canvasWidth / 2, 50);
+  }
+
+  if (extra.finalBottom) {
+    ctx.font = "18px sans-serif";
+    ctx.textAlign = "right";
+    ctx.fillText(extra.finalBottom, canvasWidth - marginRight - 10, canvasHeight - 60);
+  }
+}
+
+return canvas;
+} 
+
 
     // === URLパラメータから盤面を再現 & UIイベント初期化 ===
     window.addEventListener("load", () => {
@@ -523,7 +572,19 @@ if (kifu) {
       if (top) document.getElementById("commentTop").value = top;
       if (bottom) document.getElementById("commentBottom").value = bottom;
 
-   
+      // --- UIイベント ---
+      const toggleBtn = document.getElementById("toggleModeBtn");
+      toggleBtn.addEventListener("click", () => {
+        freeMode = !freeMode;
+        toggleBtn.textContent = freeMode ? "通常モードに切替" : "自由配置モードに切替";
+      });
+      document.querySelectorAll('input[name="startColor"]').forEach(r => {
+        r.addEventListener("change", () => {
+          const val = document.querySelector('input[name="startColor"]:checked').value;
+          blackTurn = (val === "black");
+        });
+      });
+
       // 初期描画
       renderBoard();
     });
@@ -583,102 +644,73 @@ if (numberedMoves.length > 0) {
         });
     });
 
- let redoStack = [];  // 戻した手を保持するスタック
-
-// 一手戻す
-function undoMove() {
-  if (freeMode) return; // 自由配置では無効
-  const last = moves.pop();
-  if (last) {
-    redoStack.push(last);
-    boardState[last.y][last.x] = null;
-    renderBoard();
-  }
-}
-
-// 一手進める
-function redoMove() {
-  if (freeMode) return;
-  const move = redoStack.pop();
-  if (move) {
-    moves.push(move);
-    boardState[move.y][move.x] = move.color;
-    renderBoard();
-  }
-}
-
-// 全て戻す
-function undoAll() {
-  if (freeMode) return;
-  while (moves.length > 0) {
-    const last = moves.pop();
-    redoStack.push(last);
-    boardState[last.y][last.x] = null;
-  }
-  renderBoard();
-}
-
-// 全て進める
-function redoAll() {
-  if (freeMode) return;
-  while (redoStack.length > 0) {
-    const move = redoStack.pop();
-    moves.push(move);
-    boardState[move.y][move.x] = move.color;
-  }
-  renderBoard();
-}
-
-
-
-
-document.getElementById("undoBtn").addEventListener("click", undoMove);
-document.getElementById("redoBtn").addEventListener("click", redoMove);
-document.getElementById("undoAllBtn").addEventListener("click", undoAll);
-document.getElementById("redoAllBtn").addEventListener("click", redoAll);
-
-const placeBlack = document.getElementById("placeBlack");
-const placeWhite = document.getElementById("placeWhite");
-
-// チェック排他制御
-placeBlack.addEventListener("change", () => {
-  if (placeBlack.checked) {
-    placeWhite.checked = false;
-  }
+    document.getElementById("gifSettingsBtn").addEventListener("click", () => {
+  document.getElementById("gifSettingsPopup").style.display = "block";
 });
-placeWhite.addEventListener("change", () => {
-  if (placeWhite.checked) {
-    placeBlack.checked = false;
-  }
+document.getElementById("closeGifSettings").addEventListener("click", () => {
+  document.getElementById("gifSettingsPopup").style.display = "none";
 });
 
-// 自由配置モード切替（1か所にまとめる）
-const toggleBtn = document.getElementById("toggleModeBtn");
-toggleBtn.addEventListener("click", () => {
-  freeMode = !freeMode;
+document.getElementById("previewGifBtn").addEventListener("click", () => {
+  const intervalSec   = parseFloat(document.getElementById("gifInterval").value) || 0.5;
+  const firstDelaySec = parseFloat(document.getElementById("gifFirstDelay").value) || intervalSec;
+  const lastDelaySec  = parseFloat(document.getElementById("gifLastDelay").value) || intervalSec;
+  const startMove     = parseInt(document.getElementById("gifStartMove").value) || 1;
 
-  if (!freeMode) {
-    // ★ 通常モードに戻るときに確認
-    const start = confirm("黒番から打ち始めますか？（キャンセルすると白番開始）");
-    blackTurn = start ? true : false;
+  const finalNumber = document.getElementById("finalNumber").checked;
+  const finalAlpha = document.getElementById("finalAlpha").checked;
+  const finalCommentTop = document.getElementById("finalCommentTop").value;
+  const finalCommentBottom = document.getElementById("finalCommentBottom").value;
 
-  
+  const interval   = intervalSec * 1000;
+  const firstDelay = firstDelaySec * 1000;
+  const lastDelay  = lastDelaySec * 1000;
+
+  const gif = new GIF({ workers: 2, quality: 10 });
+
+  // 1フレーム目
+  const baseMoves = moves.filter(m => m.number === null || m.number < startMove);
+  gif.addFrame(renderBoardForGif(baseMoves, {frameType:"normal"}), { delay: firstDelay });
+
+  // メインループ
+  for (let i = startMove; i <= moves.length; i++) {
+    const tempMoves = moves.filter(m => m.number === null || m.number <= i);
+    const isFinal = (i === moves.length);
+
+    let extra = { frameType: isFinal ? "final" : "normal" };
+    if (isFinal) {
+      extra.finalNumber = finalNumber;
+      extra.finalAlpha = finalAlpha;
+      extra.finalTop = finalCommentTop;
+      extra.finalBottom = finalCommentBottom;
+    }
+
+    gif.addFrame(renderBoardForGif(tempMoves, extra), { delay: (isFinal ? lastDelay : interval) });
   }
 
-  // ラベル更新（必ず毎回反映される）
-  toggleBtn.innerText = freeMode ? "通常モードに切替" : "自由配置モードに切替";
+  // 完成時にプレビュー表示
+  gif.on("finished", blob => {
+    const url = URL.createObjectURL(blob);
+    const img = document.createElement("img");
+    img.src = url;
 
+    const content = document.getElementById("gifPreviewContent");
+    content.innerHTML = "";
+    content.appendChild(img);
 
-  // 自由配置専用UIの表示切替
-  document.getElementById("freeModeControls").style.display = freeMode ? "block" : "none";
-  if (!freeMode) {
-    placeBlack.checked = false;
-    placeWhite.checked = false;
-  }
+    document.getElementById("gifPreviewPopup").style.display = "block";
+  });
+
+  gif.render();
 });
+
+// 閉じるボタン
+document.getElementById("closeGifPreview").addEventListener("click", () => {
+  document.getElementById("gifPreviewPopup").style.display = "none";
+});
+
 
 
   </script>  
 </body>
 </html>
-
