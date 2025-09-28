@@ -407,110 +407,126 @@ document.getElementById("saveGifBtn").addEventListener("click", () => {
 });
 
 
-    // --- GIF/PNG共通描画 ---
-    function renderBoardForGif(movesSubset, extra = {}) {
-      const innerSize = (size - 1) * cell;
-      const boardSize = size * cell;
-      const canvasWidth  = marginLeft + boardSize + marginRight;
-      const canvasHeight = marginTop + boardSize + marginBottom;
+ // --- GIF/PNG共通描画 ---
+function renderBoardForGif(movesSubset, extra = {}) {
+  const innerSize = (size - 1) * cell;
+  const boardSize = size * cell;
+  const canvasWidth  = marginLeft + boardSize + marginRight;
+  const canvasHeight = marginTop + boardSize + marginBottom;
 
-      const canvas = document.createElement("canvas");
-      canvas.width = canvasWidth;
-      canvas.height = canvasHeight;
-      const ctx = canvas.getContext("2d");
+  const canvas = document.createElement("canvas");
+  canvas.width = canvasWidth;
+  canvas.height = canvasHeight;
+  const ctx = canvas.getContext("2d");
 
-      ctx.fillStyle = "#F9EBCF";
-      ctx.fillRect(0, 0, canvas.width, canvas.height);
+  ctx.fillStyle = "#F9EBCF";
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-      ctx.strokeStyle = "black";
-      ctx.lineWidth = 1;
-      for (let i = 1; i < size - 1; i++) {
-        const x = marginLeft + i * cell + 0.5;
-        ctx.beginPath();
-        ctx.moveTo(x, marginTop);
-        ctx.lineTo(x, marginTop + innerSize);
-        ctx.stroke();
-      }
-      for (let i = 1; i < size - 1; i++) {
-        const y = marginTop + i * cell + 0.5;
-        ctx.beginPath();
-        ctx.moveTo(marginLeft, y);
-        ctx.lineTo(marginLeft + innerSize, y);
-        ctx.stroke();
-      }
+  ctx.strokeStyle = "black";
+  ctx.lineWidth = 1;
+  for (let i = 1; i < size - 1; i++) {
+    const x = marginLeft + i * cell + 0.5;
+    ctx.beginPath();
+    ctx.moveTo(x, marginTop);
+    ctx.lineTo(x, marginTop + innerSize);
+    ctx.stroke();
+  }
+  for (let i = 1; i < size - 1; i++) {
+    const y = marginTop + i * cell + 0.5;
+    ctx.beginPath();
+    ctx.moveTo(marginLeft, y);
+    ctx.lineTo(marginLeft + innerSize, y);
+    ctx.stroke();
+  }
 
-      ctx.lineWidth = 2;
-      ctx.strokeRect(marginLeft + 0.5, marginTop + 0.5, innerSize, innerSize);
+  ctx.lineWidth = 2;
+  ctx.strokeRect(marginLeft + 0.5, marginTop + 0.5, innerSize, innerSize);
 
-      drawCoordinates(ctx, canvas.width, canvas.height, innerSize);
-      drawStars(ctx);
+  drawCoordinates(ctx, canvas.width, canvas.height, innerSize);
+  drawStars(ctx);
 
-      movesSubset.forEach(m => {
-        const cx = marginLeft + m.x * cell;
-        const cy = marginTop + (size - 1 - m.y) * cell;
+  // 石の描画
+  movesSubset.forEach(m => {
+    const cx = marginLeft + m.x * cell;
+    const cy = marginTop + (size - 1 - m.y) * cell;
 
-        ctx.beginPath();
-        ctx.arc(cx, cy, 12, 0, Math.PI * 2);
-        ctx.fillStyle = m.color === "black" ? "black" : "white";
-        ctx.fill();
-        ctx.stroke();
+    ctx.beginPath();
+    ctx.arc(cx, cy, 12, 0, Math.PI * 2);
+    ctx.fillStyle = m.color === "black" ? "black" : "white";
+    ctx.fill();
+    ctx.stroke();
 
-        if (m.number !== null) {
-          ctx.fillStyle = m.color === "black" ? "white" : "black";
-          ctx.font = "bold 12px sans-serif";
-          ctx.textAlign = "center";
-          ctx.textBaseline = "middle";
-          ctx.fillText(m.number, cx, cy);
-        }
-      });
+    if (m.number !== null) {
+      ctx.fillStyle = m.color === "black" ? "white" : "black";
+      ctx.font = "bold 12px sans-serif";
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillText(m.number, cx, cy);
+    }
+  });
 
-    // --- ラベル描画 ---
+  // --- ラベル描画 ---
   ctx.font = "bold 14px sans-serif";
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
 
-  labels.forEach(l => {
-    const isNumber = !isNaN(l.text);
-    const isAlpha = /^[A-Z]$/.test(l.text);
+  if (extra.frameType === "final") {
+    // ★ 最終フレーム → チェックボックスに応じて数字/アルファを選択描画
+    labels.forEach(l => {
+      const isNumber = !isNaN(l.text);
+      const isAlpha = /^[A-Z]$/.test(l.text);
 
-    // 最終フレームで「finalNumber/Alpha」が選ばれていたら、その条件に合わないものは描画しない
-    if (extra.frameType === "final") {
-      if (isNumber && !extra.finalNumber) return;
-      if (isAlpha && !extra.finalAlpha) return;
-    } else {
-      // 通常フレームでは数字・アルファは描画しない
+      if ((isNumber && !extra.finalNumber) || (isAlpha && !extra.finalAlpha)) return;
+
+      const cx = marginLeft + l.x * cell;
+      const cy = marginTop + (size - 1 - l.y) * cell;
+
+      // 背景を塗りつぶしてから文字描画
+      ctx.fillStyle = "#F9EBCF";
+      ctx.fillRect(cx - cell/2 + 1, cy - cell/2 + 1, cell - 2, cell - 2);
+
+      ctx.fillStyle = "red";
+      ctx.fillText(l.text, cx, cy);
+    });
+  } else {
+    // ★ 通常フレーム → 数字/アルファ以外のみ描画
+    labels.forEach(l => {
+      const isNumber = !isNaN(l.text);
+      const isAlpha = /^[A-Z]$/.test(l.text);
       if (isNumber || isAlpha) return;
+
+      const cx = marginLeft + l.x * cell;
+      const cy = marginTop + (size - 1 - l.y) * cell;
+
+      ctx.fillStyle = "#F9EBCF";
+      ctx.fillRect(cx - cell/2 + 1, cy - cell/2 + 1, cell - 2, cell - 2);
+
+      ctx.fillStyle = "red";
+      ctx.fillText(l.text, cx, cy);
+    });
+  }
+
+  // 通常コメント
+  drawComments(ctx, canvas.width, canvas.height);
+
+  // ★ 最終フレーム専用コメント
+  if (extra.frameType === "final") {
+    ctx.fillStyle = "black";
+    if (extra.finalTop) {
+      ctx.font = "18px sans-serif";
+      ctx.textAlign = "center";
+      ctx.fillText(extra.finalTop, canvasWidth / 2, 50);
     }
-
-    const cx = marginLeft + l.x * cell;
-    const cy = marginTop + (size - 1 - l.y) * cell;
-    ctx.fillStyle = "red";
-    ctx.fillText(l.text, cx, cy);
-  });
-
-  // コメント
-// コメント
-drawComments(ctx, canvas.width, canvas.height);
-
-// ★ 最終フレーム専用コメント
-if (extra.frameType === "final") {
-  ctx.fillStyle = "black";   // テストで赤にしてみる
-
-  if (extra.finalTop) {
-    ctx.font = "18px sans-serif";
-    ctx.textAlign = "center";
-    ctx.fillText(extra.finalTop, canvasWidth / 2, 50);
+    if (extra.finalBottom) {
+      ctx.font = "18px sans-serif";
+      ctx.textAlign = "right";
+      ctx.fillText(extra.finalBottom, canvasWidth - marginRight - 10, canvasHeight - 60);
+    }
   }
 
-  if (extra.finalBottom) {
-    ctx.font = "18px sans-serif";
-    ctx.textAlign = "right";
-    ctx.fillText(extra.finalBottom, canvasWidth - marginRight - 10, canvasHeight - 60);
-  }
+  return canvas;
 }
 
-return canvas;
-} 
 
 
     // === URLパラメータから盤面を再現 & UIイベント初期化 ===
