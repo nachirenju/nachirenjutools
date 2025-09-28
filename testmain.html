@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<title id="pageTitle">連珠トーナメント集計・スワップ解析</title>
+<style>
+  body { font-family: sans-serif; padding: 1em; }
+  input, button { padding: 5px; margin: 5px; }
+  table { border-collapse: collapse; margin-top: 10px; width: 900px; }
+  th, td { border: 1px solid #ccc; padding: 5px; text-align: center; }
+</style>
+<script src="https://cdn.jsdelivr.net/npm/xlsx/dist/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/gif.js.optimized/dist/gif.js"></script>
+<script src="lang.js"></script>
+<script src="tournamentanalysis.js" defer></script>
+</head>
+<body>
+
+<h1 id="mainHeading">連珠トーナメント集計・スワップ解析</h1>
+
+<input type="file" id="fileInput" accept=".rif,.xml"><br>
+
+<!-- 言語切り替え -->
+<label for="langSelect">Language: </label>
+<select id="langSelect">
+  <option value="ja">日本語</option>
+  <option value="en">English</option>
+  <option value="ko">한국어</option>
+  <option value="zh">中文</option>
+</select>
+<br>
+
+<!-- 使い方リンク -->
+<a href="#" id="showHelp">使い方</a>
+<a href="#" id="historyLink">更新履歴</a>
+<a href="freeboard.html" id="freeBoardLink">連珠盤</a>
+  <br>
+
+<!-- モーダル用のコンテナ -->
+<div id="helpModal" style="display:none; position:fixed; top:10%; left:10%; width:80%; max-height:80%; overflow:auto; background:white; border:2px solid black; padding:1em; z-index:1000;">
+  <h2 id="helpTitle">使い方</h2>
+  <p id="helpDescription">
+    連珠のトーナメント集計ツールです。<a href="https://x.com/nachirenju">@nachirenju</a>が興味本位で知識0のところから製作した経緯上、ちゃんと動くか未知数です。<br>
+    私自身の使用に問題はありませんでしたが、こちらを使用したことでいかなる問題が発生しても責任は負いかねます。<br>
+    何かあればXアカウントのほうにご連絡ください。
+    このツールとは全く関係ないですが<a href="https://www.youtube.com/channel/UCfbgN9hrrh9fmFKs8gxln5g">youtubeチャンネル</a>を所有しています。こちらも応援していただけると幸いです。
+  </p>
+  <!-- 以下は内容そのまま -->
+  <h3>〇基本的な使い方</h3>
+  <ol>
+    <li>「ファイルを選択」を押しデータベースを読み込ませます。.rifおよび.xmlが読み込み可能（データベースは<a href="https://www.renju.net/">RIF公式</a>よりダウンロード可能）<br>
+        ※RIF公式のデータベースでしか動作検証をしていません。</li>
+    <li>キーワード検索で候補を探すか、大会IDを右側の欄に直接入力します。カンマ区切りで複数入力可<br>
+    <li>入力後、「大会集計」ボタンを押すと基本データが出ます。</li>
+<li>現状、Soosrv-8,Taraguchi-10,Classic,Yamaguchi以外のトーナメントには未対応です。</li>
+<li>プレイヤーで絞り込みは、入力したプレイヤーが参加した大会すべてがリストアップされ、他条件と連動します。</li>
+  </ol>
+
+  <h3>〇データについて</h3>
+  <ul>
+    <li>N手目着手者勝利数のみ、決着がついた対局のみから集計してます（引き分け除外）</li>
+    <li>頻出棋譜リストに黒()という記載がありますが、これは開局において黒がN手目を打ちましたという意味です(swap履歴)<br>
+        (例)黒(1,3):Suzuki Taro,白:Sato Jiro→Suzukiさんが1,3手目、Satoさんが2,4,5手目を着手
+  </ul>
+
+  <button id="closeHelp">閉じる</button>
+</div>
+
+<!-- 更新履歴 -->
+<div id="historyContent" style="display:none; border:1px solid #ccc; padding:10px; margin-top:5px;">
+    <button id="closeHistory" style="float:right;">閉じる</button>
+  〇更新履歴
+  <li>2025/09/06 ...</li>
+</div>
+
+<!-- 検索エリア -->
+<input type="text" id="keyword" placeholder="キーワードで検索">
+
+<label><input type="checkbox" id="matchPartial" checked> 部分一致</label>
+<label><input type="checkbox" id="matchStart"> 先頭一致</label>
+<label><input type="radio" name="matchType" value="regex"> 正規表現</label>
+
+<div id="suggestions"></div>
+
+<label><input type="checkbox" class="ruleCheckbox" value="24" checked> Soosrv-8</label>
+<label><input type="checkbox" class="ruleCheckbox" value="25" checked> Taraguchi-10</label>
+<label><input type="checkbox" class="ruleCheckbox" value="1"  checked> Classic</label>
+<label><input type="checkbox" class="ruleCheckbox" value="5"  checked> Yamaguchi</label>
+
+<label><input type="checkbox" id="enablePlayerFilter"> プレイヤーで絞り込み</label>
+<input type="text" id="searchPlayerInput" placeholder="プレイヤー名を入力" style="display:none;">
+<button id="searchPlayerCandidatesBtn" style="display:none;">該当プレイヤーを検索</button>
+<div id="searchPlayerCandidates"></div>
+
+<input type="text" id="tournamentId" placeholder="大会IDを入力">
+<button id="analyzeBtn">大会集計</button>
+<button id="clearBtn">大会集計欄をクリア</button>
+
+<h2 id="statsTitle">大会勝敗統計</h2>
+<div id="stats"></div>
+
+<h2 id="swapExampleTitle">最多スワップパターン対局例</h2>
+<div id="mostSwapExample"></div>
+
+<h2 id="openingRankTitle">珠型ランキング（上位10件）</h2>
+<table id="openingTable">
+  <thead><tr><th>順位</th><th>珠型名</th><th>件数</th></tr></thead>
+  <tbody></tbody>
+</table>
+
+<h2 id="top5Title">5手目までの頻出棋譜ランキング（上位10）</h2>
+<div id="top5MovesContainer"></div>
+
+<h2 id="openingWinTitle">珠型ごとの勝率（全珠型）</h2>
+<table id="openingWinRateTable">
+  <thead><tr><th>珠型名</th><th>黒勝率</th><th>白勝率</th><th>引き分け率</th><th>対局数</th></tr></thead>
+  <tbody></tbody>
+</table>
+
+<h2 id="playerStatsTitle">プレイヤー別集計</h2>
+<input type="text" id="playerInput" placeholder="プレイヤー名を入力">
+<div id="playerCandidates"></div>
+<button id="analyzePlayerBtn">集計</button>
+<div id="playerStats"></div>
+
+<h2 id="playerTop5Title">検索したプレイヤーの5手目頻出棋譜top10</h2>
+<div id="tournamentplayerTop5MovesContainer"></div>
+
+<h2 id="swapSearchTitle">スワップ履歴検索</h2>
+<input type="text" id="swapPlayerInput" placeholder="プレイヤー名または珠型名を入力">
+<button id="searchSwapBtn">検索</button>
+<div id="swapResult"></div>
+
+<!-- 以下、モーダルや棋譜表示部分は内容そのまま -->
+<div id="modalOverlay"></div>
+<div id="openingPopup"> ... </div>
+<div id="gameModal"> ... </div>
+<div id="gameModalOverlay"></div>
+
+</body>
+</html>
