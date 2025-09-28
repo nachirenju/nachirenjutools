@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
   <meta charset="UTF-8">
-  <title>連珠盤</title>
+  <title>テスト環境連珠盤</title>
   <style>
     body { font-family: sans-serif; }
     #controls { margin: 10px 0; }
@@ -36,8 +36,6 @@
   二回クリックすると石が消えます。
   <div id="controls">
     <button id="toggleModeBtn">自由配置モードに切替</button>
-    <label><input type="radio" name="startColor" value="black" checked> 黒番開始</label>
-    <label><input type="radio" name="startColor" value="white"> 白番開始</label>
     <button id="saveBoardPng">PNG保存</button>
     <!-- ★ GIF保存詳細設定ポップアップ -->
 <button id="gifSettingsBtn">GIF保存詳細設定</button>
@@ -404,7 +402,7 @@ function handleClick(e, button) {
       link.click();
     });
 
- // --- GIF保存 ---
+// --- GIF保存 ---
 document.getElementById("saveGifBtn").addEventListener("click", () => {
   const intervalSec   = parseFloat(document.getElementById("gifInterval").value) || 0.5;
   const firstDelaySec = parseFloat(document.getElementById("gifFirstDelay").value) || intervalSec;
@@ -422,28 +420,27 @@ document.getElementById("saveGifBtn").addEventListener("click", () => {
 
   const gif = new GIF({ workers: 2, quality: 10 });
 
-  // 1フレーム目（初期局面）
+  // --- 1フレーム目（開始局面）
   const baseMoves = moves.filter(m => m.number === null || m.number < startMove);
   gif.addFrame(renderBoardForGif(baseMoves, { frameType:"normal" }), { delay: firstDelay });
 
-  // メインループ
-  for (let i = startMove; i <= moves.length; i++) {
-    const tempMoves = moves.filter(m => m.number === null || m.number <= i);
-    const isFinal = (i === moves.length);
+  // --- 通常モードの最後の着手番号を取得
+  const lastMoveNumber = Math.max(0, ...moves.filter(m => m.number !== null).map(m => m.number));
 
+  // --- メインループ
+  for (let i = startMove; i <= lastMoveNumber; i++) {
+    const tempMoves = moves.filter(m => m.number === null || (m.number !== null && m.number <= i));
+    const isFinal = (i === lastMoveNumber);
+
+    let extra = { frameType: isFinal ? "final" : "normal" };
     if (isFinal) {
-      // ★ 最終フレーム専用：数字/アルファラベルと専用コメントを含めて描画
-      gif.addFrame(renderBoardForGif(tempMoves, {
-        frameType: "final",
-        finalNumber: finalNumber,
-        finalAlpha: finalAlpha,
-        finalTop: finalCommentTop,
-        finalBottom: finalCommentBottom
-      }), { delay: lastDelay });
-    } else {
-      // ★ 通常フレーム：数字/アルファラベルなし
-      gif.addFrame(renderBoardForGif(tempMoves, { frameType: "normal" }), { delay: interval });
+      extra.finalNumber = finalNumber;
+      extra.finalAlpha = finalAlpha;
+      extra.finalTop = finalCommentTop;
+      extra.finalBottom = finalCommentBottom;
     }
+
+    gif.addFrame(renderBoardForGif(tempMoves, extra), { delay: (isFinal ? lastDelay : interval) });
   }
 
   gif.on("finished", blob => {
@@ -452,8 +449,10 @@ document.getElementById("saveGifBtn").addEventListener("click", () => {
     link.download = "board.gif";
     link.click();
   });
+
   gif.render();
 });
+
 
 
 
