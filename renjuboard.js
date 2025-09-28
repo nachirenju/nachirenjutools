@@ -299,7 +299,7 @@ document.getElementById("saveGifBtn").addEventListener("click", () => {
   const firstDelay = firstDelaySec * 1000;
   const lastDelay  = lastDelaySec * 1000;
 
-  const gif = new GIF({ workers: 2, quality: 10 });
+  const gif = new GIF({ workers: 2, quality: 1 });
 
   // 1フレーム目（開始局面 = 自由配置 + startMove-1 までの番号手）
   const baseMoves = moves.filter(m => m.number === null || m.number < startMove);
