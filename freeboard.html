@@ -402,16 +402,14 @@ function handleClick(e, button) {
       link.click();
     });
 
- // --- GIF保存 ---
+// --- GIF保存 ---
 document.getElementById("saveGifBtn").addEventListener("click", () => {
   const intervalSec   = parseFloat(document.getElementById("gifInterval").value) || 0.5;
   const firstDelaySec = parseFloat(document.getElementById("gifFirstDelay").value) || intervalSec;
   const lastDelaySec  = parseFloat(document.getElementById("gifLastDelay").value) || intervalSec;
   const startMove     = parseInt(document.getElementById("gifStartMove").value) || 1;
 
-  const finalNumber = document.getElementById("finalNumber").checked;
-  const finalAlpha = document.getElementById("finalAlpha").checked;
-  const finalCommentTop = document.getElementById("finalCommentTop").value;
+  const finalCommentTop    = document.getElementById("finalCommentTop").value;
   const finalCommentBottom = document.getElementById("finalCommentBottom").value;
 
   const interval   = intervalSec * 1000;
@@ -420,28 +418,23 @@ document.getElementById("saveGifBtn").addEventListener("click", () => {
 
   const gif = new GIF({ workers: 2, quality: 10 });
 
-  // 1フレーム目（初期局面）
+  // 1フレーム目（開始局面 = 自由配置 + startMove-1 までの番号手）
   const baseMoves = moves.filter(m => m.number === null || m.number < startMove);
-  gif.addFrame(renderBoardForGif(baseMoves, { frameType:"normal" }), { delay: firstDelay });
+  gif.addFrame(renderBoardForGif(baseMoves, { frameType: "normal" }), { delay: firstDelay });
+
+  // 「番号付きの最後の手」を最終フレームとする（自由配置は無関係）
+  const lastMoveNumber = Math.max(0, ...moves.filter(m => m.number !== null).map(m => m.number));
 
   // メインループ
-  for (let i = startMove; i <= moves.length; i++) {
-    const tempMoves = moves.filter(m => m.number === null || m.number <= i);
-    const isFinal = (i === moves.length);
+  for (let i = startMove; i <= lastMoveNumber; i++) {
+    const tempMoves = moves.filter(m => m.number === null || (m.number !== null && m.number <= i));
+    const isFinal = (i === lastMoveNumber);
 
-    if (isFinal) {
-      // ★ 最終フレーム専用：数字/アルファラベルと専用コメントを含めて描画
-      gif.addFrame(renderBoardForGif(tempMoves, {
-        frameType: "final",
-        finalNumber: finalNumber,
-        finalAlpha: finalAlpha,
-        finalTop: finalCommentTop,
-        finalBottom: finalCommentBottom
-      }), { delay: lastDelay });
-    } else {
-      // ★ 通常フレーム：数字/アルファラベルなし
-      gif.addFrame(renderBoardForGif(tempMoves, { frameType: "normal" }), { delay: interval });
-    }
+    const extra = isFinal
+      ? { frameType: "final", finalTop: finalCommentTop, finalBottom: finalCommentBottom }
+      : { frameType: "normal" };
+
+    gif.addFrame(renderBoardForGif(tempMoves, extra), { delay: isFinal ? lastDelay : interval });
   }
 
   gif.on("finished", blob => {
@@ -450,8 +443,10 @@ document.getElementById("saveGifBtn").addEventListener("click", () => {
     link.download = "board.gif";
     link.click();
   });
+
   gif.render();
 });
+
 
 
 
@@ -467,9 +462,11 @@ function renderBoardForGif(movesSubset, extra = {}) {
   canvas.height = canvasHeight;
   const ctx = canvas.getContext("2d");
 
+  // 背景
   ctx.fillStyle = "#F9EBCF";
   ctx.fillRect(0, 0, canvas.width, canvas.height);
 
+  // 盤
   ctx.strokeStyle = "black";
   ctx.lineWidth = 1;
   for (let i = 1; i < size - 1; i++) {
@@ -486,14 +483,13 @@ function renderBoardForGif(movesSubset, extra = {}) {
     ctx.lineTo(marginLeft + innerSize, y);
     ctx.stroke();
   }
-
   ctx.lineWidth = 2;
   ctx.strokeRect(marginLeft + 0.5, marginTop + 0.5, innerSize, innerSize);
 
   drawCoordinates(ctx, canvas.width, canvas.height, innerSize);
   drawStars(ctx);
 
-  // 石の描画
+  // 石
   movesSubset.forEach(m => {
     const cx = marginLeft + m.x * cell;
     const cy = marginTop + (size - 1 - m.y) * cell;
@@ -513,51 +509,41 @@ function renderBoardForGif(movesSubset, extra = {}) {
     }
   });
 
-  // --- ラベル描画 ---
+  // === ラベル描画 ===
+  const finalNumberOnly = document.getElementById("finalNumber").checked; // 数字は最終だけ？
+  const finalAlphaOnly  = document.getElementById("finalAlpha").checked;  // アルファは最終だけ？
+
   ctx.font = "bold 14px sans-serif";
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
 
-  if (extra.frameType === "final") {
-    // ★ 最終フレーム → チェックボックスに応じて数字/アルファを選択描画
-    labels.forEach(l => {
-      const isNumber = !isNaN(l.text);
-      const isAlpha = /^[A-Z]$/.test(l.text);
+  labels.forEach(l => {
+    const txt = String(l.text);
+    const isNumber = /^[0-9]+$/.test(txt);
+    const isAlpha  = /^[A-Z]$/.test(txt);
 
-      if ((isNumber && !extra.finalNumber) || (isAlpha && !extra.finalAlpha)) return;
+    // 通常フレームでは「finalOnly 指定の種類」は非表示にする
+    if (extra.frameType !== "final") {
+      if (isNumber && finalNumberOnly) return;
+      if (isAlpha  && finalAlphaOnly ) return;
+    }
+    // 最終フレームでは全て表示（finalOnly 指定のものも表示）
 
-      const cx = marginLeft + l.x * cell;
-      const cy = marginTop + (size - 1 - l.y) * cell;
+    const cx = marginLeft + l.x * cell;
+    const cy = marginTop + (size - 1 - l.y) * cell;
 
-      // 背景を塗りつぶしてから文字描画
-      ctx.fillStyle = "#F9EBCF";
-      ctx.fillRect(cx - cell/2 + 1, cy - cell/2 + 1, cell - 2, cell - 2);
+    // 背景で格子を消してから書く
+    ctx.fillStyle = "#F9EBCF";
+    ctx.fillRect(cx - cell/2 + 1, cy - cell/2 + 1, cell - 2, cell - 2);
 
-      ctx.fillStyle = "red";
-      ctx.fillText(l.text, cx, cy);
-    });
-  } else {
-    // ★ 通常フレーム → 数字/アルファ以外のみ描画
-    labels.forEach(l => {
-      const isNumber = !isNaN(l.text);
-      const isAlpha = /^[A-Z]$/.test(l.text);
-      if (isNumber || isAlpha) return;
-
-      const cx = marginLeft + l.x * cell;
-      const cy = marginTop + (size - 1 - l.y) * cell;
-
-      ctx.fillStyle = "#F9EBCF";
-      ctx.fillRect(cx - cell/2 + 1, cy - cell/2 + 1, cell - 2, cell - 2);
-
-      ctx.fillStyle = "red";
-      ctx.fillText(l.text, cx, cy);
-    });
-  }
+    ctx.fillStyle = "red";
+    ctx.fillText(txt, cx, cy);
+  });
 
   // 通常コメント
   drawComments(ctx, canvas.width, canvas.height);
 
-  // ★ 最終フレーム専用コメント
+  // 最終フレーム専用コメント
   if (extra.frameType === "final") {
     ctx.fillStyle = "black";
     if (extra.finalTop) {
@@ -704,15 +690,14 @@ document.getElementById("closeGifSettings").addEventListener("click", () => {
   document.getElementById("gifSettingsPopup").style.display = "none";
 });
 
+// プレビュー（保存と同じロジック）
 document.getElementById("previewGifBtn").addEventListener("click", () => {
   const intervalSec   = parseFloat(document.getElementById("gifInterval").value) || 0.5;
   const firstDelaySec = parseFloat(document.getElementById("gifFirstDelay").value) || intervalSec;
   const lastDelaySec  = parseFloat(document.getElementById("gifLastDelay").value) || intervalSec;
   const startMove     = parseInt(document.getElementById("gifStartMove").value) || 1;
 
-  const finalNumber = document.getElementById("finalNumber").checked;
-  const finalAlpha = document.getElementById("finalAlpha").checked;
-  const finalCommentTop = document.getElementById("finalCommentTop").value;
+  const finalCommentTop    = document.getElementById("finalCommentTop").value;
   const finalCommentBottom = document.getElementById("finalCommentBottom").value;
 
   const interval   = intervalSec * 1000;
@@ -721,24 +706,20 @@ document.getElementById("previewGifBtn").addEventListener("click", () => {
 
   const gif = new GIF({ workers: 2, quality: 10 });
 
-  // 1フレーム目
   const baseMoves = moves.filter(m => m.number === null || m.number < startMove);
-  gif.addFrame(renderBoardForGif(baseMoves, {frameType:"normal"}), { delay: firstDelay });
+  gif.addFrame(renderBoardForGif(baseMoves, { frameType: "normal" }), { delay: firstDelay });
 
-  // メインループ
-  for (let i = startMove; i <= moves.length; i++) {
-    const tempMoves = moves.filter(m => m.number === null || m.number <= i);
-    const isFinal = (i === moves.length);
+  const lastMoveNumber = Math.max(0, ...moves.filter(m => m.number !== null).map(m => m.number));
 
-    let extra = { frameType: isFinal ? "final" : "normal" };
-    if (isFinal) {
-      extra.finalNumber = finalNumber;
-      extra.finalAlpha = finalAlpha;
-      extra.finalTop = finalCommentTop;
-      extra.finalBottom = finalCommentBottom;
-    }
+  for (let i = startMove; i <= lastMoveNumber; i++) {
+    const tempMoves = moves.filter(m => m.number === null || (m.number !== null && m.number <= i));
+    const isFinal = (i === lastMoveNumber);
 
-    gif.addFrame(renderBoardForGif(tempMoves, extra), { delay: (isFinal ? lastDelay : interval) });
+    const extra = isFinal
+      ? { frameType: "final", finalTop: finalCommentTop, finalBottom: finalCommentBottom }
+      : { frameType: "normal" };
+
+    gif.addFrame(renderBoardForGif(tempMoves, extra), { delay: isFinal ? lastDelay : interval });
   }
 
   // 完成時にプレビュー表示
@@ -859,4 +840,3 @@ toggleBtn.addEventListener("click", () => {
   </script>  
 </body>
 </html>
-
