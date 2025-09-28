@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
   <meta charset="UTF-8">
-  <title>テスト環境連珠盤</title>
+  <title>連珠盤</title>
   <style>
     body { font-family: sans-serif; }
     #controls { margin: 10px 0; }
@@ -37,6 +37,33 @@
   <div id="controls">
     <button id="toggleModeBtn">自由配置モードに切替</button>
     <button id="saveBoardPng">PNG保存</button>
+<button id="saveBoardCropBtn">PNG指定範囲保存</button>
+<!-- PNGプレビューポップアップ -->
+<div id="pngPreviewPopup" style="display:none;
+  position:fixed; top:10%; left:20%; width:60%;
+  background:#fff; border:2px solid #333; padding:15px;
+  z-index:2100; box-shadow:0 0 15px rgba(0,0,0,0.5); text-align:center;">
+  <h3>PNGプレビュー（指定範囲）</h3>
+  <div>
+    <label>余白(路数): 
+      <input type="number" id="cropMargin" value="2" min="0" max="10">
+    </label>
+  </div>
+  <div style="margin-top:5px;">
+    <label><input type="checkbox" id="showOuterFrame" checked> 外枠を描画</label><br>
+    <label><input type="checkbox" id="showExtraMargin" checked> 上下左右の外側余白を追加</label><br>
+    <label><input type="checkbox" id="showCoordinates" checked> 座標を表示</label><br>
+  </div>
+  <div id="pngPreviewContent" style="margin-top:10px;"></div>
+  <br>
+  <button id="downloadCropPngBtn">保存</button>
+  <button id="closePngPreview">閉じる</button>
+</div>
+
+
+
+
+
     <!-- ★ GIF保存詳細設定ポップアップ -->
 <button id="gifSettingsBtn">GIF保存詳細設定</button>
 <div id="gifSettingsPopup">
@@ -409,9 +436,7 @@ document.getElementById("saveGifBtn").addEventListener("click", () => {
   const lastDelaySec  = parseFloat(document.getElementById("gifLastDelay").value) || intervalSec;
   const startMove     = parseInt(document.getElementById("gifStartMove").value) || 1;
 
-  const finalNumber = document.getElementById("finalNumber").checked;
-  const finalAlpha = document.getElementById("finalAlpha").checked;
-  const finalCommentTop = document.getElementById("finalCommentTop").value;
+  const finalCommentTop    = document.getElementById("finalCommentTop").value;
   const finalCommentBottom = document.getElementById("finalCommentBottom").value;
 
   const interval   = intervalSec * 1000;
@@ -420,27 +445,23 @@ document.getElementById("saveGifBtn").addEventListener("click", () => {
 
   const gif = new GIF({ workers: 2, quality: 10 });
 
-  // --- 1フレーム目（開始局面）
+  // 1フレーム目（開始局面 = 自由配置 + startMove-1 までの番号手）
   const baseMoves = moves.filter(m => m.number === null || m.number < startMove);
-  gif.addFrame(renderBoardForGif(baseMoves, { frameType:"normal" }), { delay: firstDelay });
+  gif.addFrame(renderBoardForGif(baseMoves, { frameType: "normal" }), { delay: firstDelay });
 
-  // --- 通常モードの最後の着手番号を取得
+  // 「番号付きの最後の手」を最終フレームとする（自由配置は無関係）
   const lastMoveNumber = Math.max(0, ...moves.filter(m => m.number !== null).map(m => m.number));
 
-  // --- メインループ
+  // メインループ
   for (let i = startMove; i <= lastMoveNumber; i++) {
     const tempMoves = moves.filter(m => m.number === null || (m.number !== null && m.number <= i));
     const isFinal = (i === lastMoveNumber);
 
-    let extra = { frameType: isFinal ? "final" : "normal" };
-    if (isFinal) {
-      extra.finalNumber = finalNumber;
-      extra.finalAlpha = finalAlpha;
-      extra.finalTop = finalCommentTop;
-      extra.finalBottom = finalCommentBottom;
-    }
+    const extra = isFinal
+      ? { frameType: "final", finalTop: finalCommentTop, finalBottom: finalCommentBottom }
+      : { frameType: "normal" };
 
-    gif.addFrame(renderBoardForGif(tempMoves, extra), { delay: (isFinal ? lastDelay : interval) });
+    gif.addFrame(renderBoardForGif(tempMoves, extra), { delay: isFinal ? lastDelay : interval });
   }
 
   gif.on("finished", blob => {
@@ -452,7 +473,6 @@ document.getElementById("saveGifBtn").addEventListener("click", () => {
 
   gif.render();
 });
-
 
 
 
@@ -469,9 +489,11 @@ function renderBoardForGif(movesSubset, extra = {}) {
   canvas.height = canvasHeight;
   const ctx = canvas.getContext("2d");
 
+  // 背景
   ctx.fillStyle = "#F9EBCF";
   ctx.fillRect(0, 0, canvas.width, canvas.height);
 
+  // 盤
   ctx.strokeStyle = "black";
   ctx.lineWidth = 1;
   for (let i = 1; i < size - 1; i++) {
@@ -488,14 +510,13 @@ function renderBoardForGif(movesSubset, extra = {}) {
     ctx.lineTo(marginLeft + innerSize, y);
     ctx.stroke();
   }
-
   ctx.lineWidth = 2;
   ctx.strokeRect(marginLeft + 0.5, marginTop + 0.5, innerSize, innerSize);
 
   drawCoordinates(ctx, canvas.width, canvas.height, innerSize);
   drawStars(ctx);
 
-  // 石の描画
+  // 石
   movesSubset.forEach(m => {
     const cx = marginLeft + m.x * cell;
     const cy = marginTop + (size - 1 - m.y) * cell;
@@ -515,51 +536,41 @@ function renderBoardForGif(movesSubset, extra = {}) {
     }
   });
 
-  // --- ラベル描画 ---
+  // === ラベル描画 ===
+  const finalNumberOnly = document.getElementById("finalNumber").checked; // 数字は最終だけ？
+  const finalAlphaOnly  = document.getElementById("finalAlpha").checked;  // アルファは最終だけ？
+
   ctx.font = "bold 14px sans-serif";
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
 
-  if (extra.frameType === "final") {
-    // ★ 最終フレーム → チェックボックスに応じて数字/アルファを選択描画
-    labels.forEach(l => {
-      const isNumber = !isNaN(l.text);
-      const isAlpha = /^[A-Z]$/.test(l.text);
+  labels.forEach(l => {
+    const txt = String(l.text);
+    const isNumber = /^[0-9]+$/.test(txt);
+    const isAlpha  = /^[A-Z]$/.test(txt);
 
-      if ((isNumber && !extra.finalNumber) || (isAlpha && !extra.finalAlpha)) return;
+    // 通常フレームでは「finalOnly 指定の種類」は非表示にする
+    if (extra.frameType !== "final") {
+      if (isNumber && finalNumberOnly) return;
+      if (isAlpha  && finalAlphaOnly ) return;
+    }
+    // 最終フレームでは全て表示（finalOnly 指定のものも表示）
 
-      const cx = marginLeft + l.x * cell;
-      const cy = marginTop + (size - 1 - l.y) * cell;
+    const cx = marginLeft + l.x * cell;
+    const cy = marginTop + (size - 1 - l.y) * cell;
 
-      // 背景を塗りつぶしてから文字描画
-      ctx.fillStyle = "#F9EBCF";
-      ctx.fillRect(cx - cell/2 + 1, cy - cell/2 + 1, cell - 2, cell - 2);
+    // 背景で格子を消してから書く
+    ctx.fillStyle = "#F9EBCF";
+    ctx.fillRect(cx - cell/2 + 1, cy - cell/2 + 1, cell - 2, cell - 2);
 
-      ctx.fillStyle = "red";
-      ctx.fillText(l.text, cx, cy);
-    });
-  } else {
-    // ★ 通常フレーム → 数字/アルファ以外のみ描画
-    labels.forEach(l => {
-      const isNumber = !isNaN(l.text);
-      const isAlpha = /^[A-Z]$/.test(l.text);
-      if (isNumber || isAlpha) return;
-
-      const cx = marginLeft + l.x * cell;
-      const cy = marginTop + (size - 1 - l.y) * cell;
-
-      ctx.fillStyle = "#F9EBCF";
-      ctx.fillRect(cx - cell/2 + 1, cy - cell/2 + 1, cell - 2, cell - 2);
-
-      ctx.fillStyle = "red";
-      ctx.fillText(l.text, cx, cy);
-    });
-  }
+    ctx.fillStyle = "red";
+    ctx.fillText(txt, cx, cy);
+  });
 
   // 通常コメント
   drawComments(ctx, canvas.width, canvas.height);
 
-  // ★ 最終フレーム専用コメント
+  // 最終フレーム専用コメント
   if (extra.frameType === "final") {
     ctx.fillStyle = "black";
     if (extra.finalTop) {
@@ -706,15 +717,14 @@ document.getElementById("closeGifSettings").addEventListener("click", () => {
   document.getElementById("gifSettingsPopup").style.display = "none";
 });
 
+// プレビュー（保存と同じロジック）
 document.getElementById("previewGifBtn").addEventListener("click", () => {
   const intervalSec   = parseFloat(document.getElementById("gifInterval").value) || 0.5;
   const firstDelaySec = parseFloat(document.getElementById("gifFirstDelay").value) || intervalSec;
   const lastDelaySec  = parseFloat(document.getElementById("gifLastDelay").value) || intervalSec;
   const startMove     = parseInt(document.getElementById("gifStartMove").value) || 1;
 
-  const finalNumber = document.getElementById("finalNumber").checked;
-  const finalAlpha = document.getElementById("finalAlpha").checked;
-  const finalCommentTop = document.getElementById("finalCommentTop").value;
+  const finalCommentTop    = document.getElementById("finalCommentTop").value;
   const finalCommentBottom = document.getElementById("finalCommentBottom").value;
 
   const interval   = intervalSec * 1000;
@@ -723,24 +733,20 @@ document.getElementById("previewGifBtn").addEventListener("click", () => {
 
   const gif = new GIF({ workers: 2, quality: 10 });
 
-  // 1フレーム目
   const baseMoves = moves.filter(m => m.number === null || m.number < startMove);
-  gif.addFrame(renderBoardForGif(baseMoves, {frameType:"normal"}), { delay: firstDelay });
+  gif.addFrame(renderBoardForGif(baseMoves, { frameType: "normal" }), { delay: firstDelay });
 
-  // メインループ
-  for (let i = startMove; i <= moves.length; i++) {
-    const tempMoves = moves.filter(m => m.number === null || m.number <= i);
-    const isFinal = (i === moves.length);
+  const lastMoveNumber = Math.max(0, ...moves.filter(m => m.number !== null).map(m => m.number));
 
-    let extra = { frameType: isFinal ? "final" : "normal" };
-    if (isFinal) {
-      extra.finalNumber = finalNumber;
-      extra.finalAlpha = finalAlpha;
-      extra.finalTop = finalCommentTop;
-      extra.finalBottom = finalCommentBottom;
-    }
+  for (let i = startMove; i <= lastMoveNumber; i++) {
+    const tempMoves = moves.filter(m => m.number === null || (m.number !== null && m.number <= i));
+    const isFinal = (i === lastMoveNumber);
 
-    gif.addFrame(renderBoardForGif(tempMoves, extra), { delay: (isFinal ? lastDelay : interval) });
+    const extra = isFinal
+      ? { frameType: "final", finalTop: finalCommentTop, finalBottom: finalCommentBottom }
+      : { frameType: "normal" };
+
+    gif.addFrame(renderBoardForGif(tempMoves, extra), { delay: isFinal ? lastDelay : interval });
   }
 
   // 完成時にプレビュー表示
@@ -853,6 +859,187 @@ toggleBtn.addEventListener("click", () => {
     placeWhite.checked = false;
   }
 });
+
+// --- PNG指定範囲保存（プレビューを表示） ---
+document.getElementById("saveBoardCropBtn").addEventListener("click", () => {
+  updateCropPreview();
+  document.getElementById("pngPreviewPopup").style.display = "block";
+});
+
+// --- プレビュー更新関数 ---
+function updateCropPreview() {
+  const marginRoutes = parseInt(document.getElementById("cropMargin").value) || 2;
+  const showOuterFrame   = document.getElementById("showOuterFrame").checked;
+  const showExtraMargin  = document.getElementById("showExtraMargin").checked;
+  const showCoordinates  = document.getElementById("showCoordinates").checked;
+ 
+
+  // 石とラベルの範囲を探索
+  let xs = [], ys = [];
+  moves.forEach(m => { xs.push(m.x); ys.push(m.y); });
+  labels.forEach(l => { xs.push(l.x); ys.push(l.y); });
+
+  if (xs.length === 0 || ys.length === 0) {
+    const content = document.getElementById("pngPreviewContent");
+    content.innerHTML = "<p>石や文字がありません</p>";
+    return;
+  }
+
+  let minX = Math.max(0, Math.min(...xs) - marginRoutes);
+  let maxX = Math.min(size - 1, Math.max(...xs) + marginRoutes);
+  let minY = Math.max(0, Math.min(...ys) - marginRoutes);
+  let maxY = Math.min(size - 1, Math.max(...ys) + marginRoutes);
+
+  if (showExtraMargin) {
+    minX = Math.max(0, minX - 1);
+    maxX = Math.min(size - 1, maxX + 1);
+    minY = Math.max(0, minY - 1);
+    maxY = Math.min(size - 1, maxY + 1);
+  }
+
+  // 描画
+  const croppedCanvas = renderBoardCrop(
+    moves, labels, minX, maxX, minY, maxY,
+    { showOuterFrame, showCoordinates, }
+  );
+
+  // プレビュー表示
+  const content = document.getElementById("pngPreviewContent");
+  content.innerHTML = "";
+  content.appendChild(croppedCanvas);
+
+  // 保存
+  document.getElementById("downloadCropPngBtn").onclick = () => {
+    const link = document.createElement("a");
+    link.href = croppedCanvas.toDataURL("image/png");
+    link.download = "board_crop.png";
+    link.click();
+  };
+}
+
+
+// --- チェックボックスや数値入力の変更で即更新 ---
+["cropMargin", "showOuterFrame", "showExtraMargin", "showCoordinates"].forEach(id => {
+  const el = document.getElementById(id);
+  if (el) {
+    el.addEventListener("input", updateCropPreview);
+  }
+});
+
+
+
+
+
+// 閉じるボタン
+document.getElementById("closePngPreview").addEventListener("click", () => {
+  document.getElementById("pngPreviewPopup").style.display = "none";
+});
+
+
+// --- 指定範囲のみ描画する関数 ---
+function renderBoardCrop(movesSubset, labelsSubset, minX, maxX, minY, maxY) {
+  const innerSizeX = (maxX - minX) * cell;
+  const innerSizeY = (maxY - minY) * cell;
+
+  // チェックボックス判定
+  const showExtraMargin = document.getElementById("showExtraMargin").checked;
+
+  const marginL = showExtraMargin ? marginLeft : 0;
+  const marginR = showExtraMargin ? marginRight : 0;
+  const marginT = showExtraMargin ? marginTop : 0;
+  const marginB = showExtraMargin ? marginBottom : 0;
+
+  const canvasWidth  = innerSizeX + marginL + marginR;
+  const canvasHeight = innerSizeY + marginT + marginB;
+
+  const canvas = document.createElement("canvas");
+  canvas.width = canvasWidth;
+  canvas.height = canvasHeight;
+  const ctx = canvas.getContext("2d");
+
+  // 背景
+  ctx.fillStyle = "#F9EBCF";
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+  // 格子線
+  ctx.strokeStyle = "black";
+  ctx.lineWidth = 1;
+  for (let i = minX; i <= maxX; i++) {
+    const x = marginL + (i - minX) * cell + 0.5;
+    ctx.beginPath();
+    ctx.moveTo(x, marginT);
+    ctx.lineTo(x, marginT + innerSizeY);
+    ctx.stroke();
+  }
+  for (let j = minY; j <= maxY; j++) {
+    const y = marginT + (j - minY) * cell + 0.5;
+    ctx.beginPath();
+    ctx.moveTo(marginL, y);
+    ctx.lineTo(marginL + innerSizeX, y);
+    ctx.stroke();
+  }
+
+  // 外枠（オプション）
+  if (document.getElementById("showOuterFrame").checked) {
+    ctx.lineWidth = 2;
+    ctx.strokeRect(marginL + 0.5, marginT + 0.5, innerSizeX, innerSizeY);
+  }
+
+  // 石
+  movesSubset.forEach(m => {
+    if (m.x < minX || m.x > maxX || m.y < minY || m.y > maxY) return;
+    const cx = marginL + (m.x - minX) * cell;
+    const cy = marginT + (maxY - m.y) * cell;
+
+    ctx.beginPath();
+    ctx.arc(cx, cy, 12, 0, Math.PI * 2);
+    ctx.fillStyle = m.color === "black" ? "black" : "white";
+    ctx.fill();
+    ctx.stroke();
+
+    if (m.number !== null) {
+      ctx.fillStyle = m.color === "black" ? "white" : "black";
+      ctx.font = "bold 12px sans-serif";
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillText(m.number, cx, cy);
+    }
+  });
+
+  // ラベル
+  ctx.font = "bold 14px sans-serif";
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  labelsSubset.forEach(l => {
+    if (l.x < minX || l.x > maxX || l.y < minY || l.y > maxY) return;
+    const cx = marginL + (l.x - minX) * cell;
+    const cy = marginT + (maxY - l.y) * cell;
+    ctx.fillStyle = "red";
+    ctx.fillText(l.text, cx, cy);
+  });
+
+  // 座標表示（オプション）
+  if (document.getElementById("showCoordinates").checked) {
+    ctx.fillStyle = "black";
+    ctx.font = "bold 14px sans-serif";
+
+    // 横軸
+    ctx.textAlign = "center";
+    for (let i = minX; i <= maxX; i++) {
+      ctx.fillText("ABCDEFGHIJKLMNO"[i], marginL + (i - minX) * cell, marginT + innerSizeY + 15);
+    }
+
+    // 縦軸
+    ctx.textAlign = "right";
+    ctx.textBaseline = "middle";
+    for (let j = minY; j <= maxY; j++) {
+      ctx.fillText(j + 1, marginL - 5, marginT + (maxY - j) * cell);
+    }
+  }
+
+  return canvas;
+}
+
 
 
 
