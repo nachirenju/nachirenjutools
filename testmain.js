@@ -810,22 +810,19 @@ if (mode === "full" && currentGame) {
   ctx.font = "14px sans-serif";
   ctx.textAlign = "left";
 
-  const blackSurname = allPlayers[currentGame.black]?.surname || currentGame.black;
-  const whiteSurname = allPlayers[currentGame.white]?.surname || currentGame.white;
-   const blackFull = allPlayers[currentGame.black]
+  const blackFull = allPlayers[currentGame.black]
     ? `${allPlayers[currentGame.black].surname} ${allPlayers[currentGame.black].name}`.trim()
     : currentGame.black;
   const whiteFull = allPlayers[currentGame.white]
     ? `${allPlayers[currentGame.white].surname} ${allPlayers[currentGame.white].name}`.trim()
     : currentGame.white;
 
- ctx.fillText(`${t("black")}: ${blackFull}`, 10, marginTop + innerSize + 35);
-    ctx.fillText(`${t("white")}: ${whiteFull}`, 10, marginTop + innerSize + 55);
+  ctx.fillText(`${t("black")}: ${blackFull}`, 10, marginTop + innerSize + 35);
+  ctx.fillText(`${t("white")}: ${whiteFull}`, 10, marginTop + innerSize + 55);
 
-  // ★ swap情報を surname で整形して出力
+  // ★ swap情報
   const swapInfo = analyzeSwap(currentGame);
   if (swapInfo && swapInfo.moveOwners) {
-    // surname に変換
     const owners = swapInfo.moveOwners.map(owner => {
       if (!owner) return "-";
       let s = owner;
@@ -836,43 +833,35 @@ if (mode === "full" && currentGame) {
       return s;
     });
 
-    // 1〜5手目だけに制限
-    const firstLine = owners
-      .map((o, idx) => `${idx + 1}手目:${o}`)
-      .slice(0, 3) // 1〜3手目
-      .join("　"); // 全角スペースで区切り
-
-    const secondLine = owners
-      .map((o, idx) => `${idx + 1}手目:${o}`)
-      .slice(3, 5) // 4,5手目
-      .join("　");
+    const firstLine = owners.map((o, idx) => `${idx + 1}手目:${o}`).slice(0, 3).join("　");
+    const secondLine = owners.map((o, idx) => `${idx + 1}手目:${o}`).slice(3, 5).join("　");
 
     ctx.fillText(`swap: ${firstLine}`, 10, marginTop + innerSize + 75);
     ctx.fillText(`      ${secondLine}`, 10, marginTop + innerSize + 95);
   }
+} // ← ここで対局者情報を閉じる
 
-
- if (isLastFrame && typeof bresult !== "undefined") {
+// --- 最終フレーム結果 ---
+if (isLastFrame && typeof bresult !== "undefined") {
   const n = moves.length;
   const isEven = n % 2 === 0;
   let prefix = isEven ? "〇" : "●";
   let resultText = "";
 
   if (bresult === 1) resultText = t("whiteResign");
-    else if (bresult === 0) resultText = t("blackResign");
-    else if (bresult === 0.5) resultText = t("drawFull");
+  else if (bresult === 0) resultText = t("blackResign");
+  else if (bresult === 0.5) resultText = t("drawFull");
 
   ctx.fillStyle = "black";
   ctx.font = "bold 15px sans-serif";
-  ctx.textAlign = "right";   // ←右寄せ
+  ctx.textAlign = "right";
   const rightX = marginLeft + innerSize;
   ctx.fillText(`${prefix}${n} にて ${resultText}`, rightX, marginTop + innerSize + 40);
 }
 
-
-
-  return canvas;
+return canvas;
 }
+
 
 
 
