@@ -87,6 +87,17 @@
   </div>
   <br>
   <div id="board"></div>
+  <div id="controls">
+  <button id="undoAllBtn">全て戻す</button>
+  <button id="undoBtn">一手戻す</button>
+  <button id="redoBtn">一手進める</button>
+  <button id="redoAllBtn">全て進める</button>
+</div>
+<div id="freeModeControls" style="display:none; margin-top:5px;">
+  <label><input type="checkbox" id="placeBlack"> 黒石配置モード</label>
+  <label><input type="checkbox" id="placeWhite"> 白石配置モード</label>
+</div>
+
   <div style="margin-top:10px; text-align:left;">
     <textarea id="kifuInput" rows="3"
               style="width:40%; font-family:monospace;"
@@ -284,63 +295,97 @@
     }
 
     // --- クリック処理 ---
-    function handleClick(e, button) {
-      const rect = e.target.getBoundingClientRect();
-      const x = Math.round((e.clientX - rect.left - marginLeft) / cell);
-      const y = size - 1 - Math.round((e.clientY - rect.top - marginTop) / cell);
+function handleClick(e, button) {
+  const rect = e.target.getBoundingClientRect();
+  const x = Math.round((e.clientX - rect.left - marginLeft) / cell);
+  const y = size - 1 - Math.round((e.clientY - rect.top - marginTop) / cell);
 
-      if (x < 0 || y < 0 || x >= size || y >= size) return;
+  if (x < 0 || y < 0 || x >= size || y >= size) return;
 
-      // ★ 追加: ラベル入力
-      if (document.getElementById("inputNumber").checked) {
-        labels.push({ x, y, text: String(nextNumber++) });
-        renderBoard();
-        return;
-      }
-      if (document.getElementById("inputAlpha").checked) {
-        labels.push({ x, y, text: String.fromCharCode(nextAlphaCode++) });
-        renderBoard();
-        return;
-      }
+  // ★ ラベル入力モード
+  if (document.getElementById("inputNumber").checked) {
+    labels.push({ x, y, text: String(nextNumber++) });
+    renderBoard();
+    return;
+  }
+  if (document.getElementById("inputAlpha").checked) {
+    labels.push({ x, y, text: String.fromCharCode(nextAlphaCode++) });
+    renderBoard();
+    return;
+  }
 
-      if (freeMode) {
-        if (button === "left") {
-          if (boardState[y][x] === "black") {
-            boardState[y][x] = null;
-            moves = moves.filter(m => !(m.x === x && m.y === y));
-          } else {
-            boardState[y][x] = "black";
-            moves.push({ x, y, color: "black", number: null });
-          }
-        } else if (button === "right") {
-          if (boardState[y][x] === "white") {
-            boardState[y][x] = null;
-            moves = moves.filter(m => !(m.x === x && m.y === y));
-          } else {
-            boardState[y][x] = "white";
-            moves.push({ x, y, color: "white", number: null });
-          }
-        }
+  // --- 自由配置モード ---
+  if (freeMode) {
+    // 黒石配置モード優先
+    if (placeBlack.checked) {
+      if (boardState[y][x] === "black") {
+        boardState[y][x] = null;
+        moves = moves.filter(m => !(m.x === x && m.y === y));
       } else {
-        if (button === "left") {
-          if (boardState[y][x]) return;
-          const color = blackTurn ? "black" : "white";
-          const moveNumber = moves.filter(m => m.number !== null).length + 1;
-          boardState[y][x] = color;
-          moves.push({ x, y, color, number: moveNumber });
-          blackTurn = !blackTurn;
-        } else if (button === "right") {
-          const last = moves.pop();
-          if (last) {
-            boardState[last.y][last.x] = null;
-            if (last.number !== null) {
-              blackTurn = (last.color === "black");
-            }
-          }
-        }
+        boardState[y][x] = "black";
+        moves.push({ x, y, color: "black", number: null });
       }
       renderBoard();
+      return;
     }
+
+    // 白石配置モード優先
+    if (placeWhite.checked) {
+      if (boardState[y][x] === "white") {
+        boardState[y][x] = null;
+        moves = moves.filter(m => !(m.x === x && m.y === y));
+      } else {
+        boardState[y][x] = "white";
+        moves.push({ x, y, color: "white", number: null });
+      }
+      renderBoard();
+      return;
+    }
+
+    // チェックなし → 左クリック=黒 / 右クリック=白
+    if (button === "left") {
+      if (boardState[y][x] === "black") {
+        boardState[y][x] = null;
+        moves = moves.filter(m => !(m.x === x && m.y === y));
+      } else {
+        boardState[y][x] = "black";
+        moves.push({ x, y, color: "black", number: null });
+      }
+    } else if (button === "right") {
+      if (boardState[y][x] === "white") {
+        boardState[y][x] = null;
+        moves = moves.filter(m => !(m.x === x && m.y === y));
+      } else {
+        boardState[y][x] = "white";
+        moves.push({ x, y, color: "white", number: null });
+      }
+    }
+  }
+
+  // --- 通常モード ---
+  else {
+    if (button === "left") {
+      if (boardState[y][x]) return; // すでに石あり
+      const color = blackTurn ? "black" : "white";
+      const moveNumber = moves.filter(m => m.number !== null).length + 1;
+      boardState[y][x] = color;
+      moves.push({ x, y, color, number: moveNumber });
+      redoStack = []; // 新規着手で未来を消す
+      blackTurn = !blackTurn;
+    } else if (button === "right") {
+      const last = moves.pop();
+      if (last) {
+        boardState[last.y][last.x] = null;
+        if (last.number !== null) {
+          blackTurn = (last.color === "black");
+        }
+        redoStack.push(last); // 戻した手を redoStack に入れる
+      }
+    }
+  }
+
+  renderBoard();
+}
 
     // ★ 追加: 削除ボタン
     document.getElementById("clearLabels").addEventListener("click", () => {
@@ -377,24 +422,28 @@ document.getElementById("saveGifBtn").addEventListener("click", () => {
 
   const gif = new GIF({ workers: 2, quality: 10 });
 
-  // 1フレーム目
+  // 1フレーム目（初期局面）
   const baseMoves = moves.filter(m => m.number === null || m.number < startMove);
-  gif.addFrame(renderBoardForGif(baseMoves, {frameType:"normal"}), { delay: firstDelay });
+  gif.addFrame(renderBoardForGif(baseMoves, { frameType:"normal" }), { delay: firstDelay });
 
   // メインループ
   for (let i = startMove; i <= moves.length; i++) {
     const tempMoves = moves.filter(m => m.number === null || m.number <= i);
     const isFinal = (i === moves.length);
 
-    let extra = { frameType: isFinal ? "final" : "normal" };
     if (isFinal) {
-      extra.finalNumber = finalNumber;
-      extra.finalAlpha = finalAlpha;
-      extra.finalTop = finalCommentTop;
-      extra.finalBottom = finalCommentBottom;
+      // ★ 最終フレーム専用：数字/アルファラベルと専用コメントを含めて描画
+      gif.addFrame(renderBoardForGif(tempMoves, {
+        frameType: "final",
+        finalNumber: finalNumber,
+        finalAlpha: finalAlpha,
+        finalTop: finalCommentTop,
+        finalBottom: finalCommentBottom
+      }), { delay: lastDelay });
+    } else {
+      // ★ 通常フレーム：数字/アルファラベルなし
+      gif.addFrame(renderBoardForGif(tempMoves, { frameType: "normal" }), { delay: interval });
     }
-
-    gif.addFrame(renderBoardForGif(tempMoves, extra), { delay: (isFinal ? lastDelay : interval) });
   }
 
   gif.on("finished", blob => {
@@ -405,6 +454,7 @@ document.getElementById("saveGifBtn").addEventListener("click", () => {
   });
   gif.render();
 });
+
 
 
  // --- GIF/PNG共通描画 ---
@@ -588,18 +638,7 @@ if (kifu) {
       if (top) document.getElementById("commentTop").value = top;
       if (bottom) document.getElementById("commentBottom").value = bottom;
 
-      // --- UIイベント ---
-      const toggleBtn = document.getElementById("toggleModeBtn");
-      toggleBtn.addEventListener("click", () => {
-        freeMode = !freeMode;
-        toggleBtn.textContent = freeMode ? "通常モードに切替" : "自由配置モードに切替";
-      });
-      document.querySelectorAll('input[name="startColor"]').forEach(r => {
-        r.addEventListener("change", () => {
-          const val = document.querySelector('input[name="startColor"]:checked').value;
-          blackTurn = (val === "black");
-        });
-      });
+    
 
       // 初期描画
       renderBoard();
@@ -724,6 +763,98 @@ document.getElementById("previewGifBtn").addEventListener("click", () => {
 document.getElementById("closeGifPreview").addEventListener("click", () => {
   document.getElementById("gifPreviewPopup").style.display = "none";
 });
+
+let redoStack = [];  // 戻した手を保持するスタック
+
+const placeBlack = document.getElementById("placeBlack");
+const placeWhite = document.getElementById("placeWhite");
+
+// 一手戻す
+function undoMove() {
+  if (freeMode) return; // 自由配置では無効
+  const last = moves.pop();
+  if (last) {
+    redoStack.push(last);
+    boardState[last.y][last.x] = null;
+    renderBoard();
+  }
+}
+
+// 一手進める
+function redoMove() {
+  if (freeMode) return;
+  const move = redoStack.pop();
+  if (move) {
+    moves.push(move);
+    boardState[move.y][move.x] = move.color;
+    renderBoard();
+  }
+}
+
+// 全て戻す
+function undoAll() {
+  if (freeMode) return;
+  while (moves.length > 0) {
+    const last = moves.pop();
+    redoStack.push(last);
+    boardState[last.y][last.x] = null;
+  }
+  renderBoard();
+}
+
+// 全て進める
+function redoAll() {
+  if (freeMode) return;
+  while (redoStack.length > 0) {
+    const move = redoStack.pop();
+    moves.push(move);
+    boardState[move.y][move.x] = move.color;
+  }
+  renderBoard();
+}
+
+document.getElementById("undoBtn").addEventListener("click", undoMove);
+document.getElementById("redoBtn").addEventListener("click", redoMove);
+document.getElementById("undoAllBtn").addEventListener("click", undoAll);
+document.getElementById("redoAllBtn").addEventListener("click", redoAll);
+
+// チェック排他制御
+placeBlack.addEventListener("change", () => {
+  if (placeBlack.checked) {
+    placeWhite.checked = false;
+  }
+});
+placeWhite.addEventListener("change", () => {
+  if (placeWhite.checked) {
+    placeBlack.checked = false;
+  }
+});
+
+// 自由配置モード切替（1か所にまとめる）
+const toggleBtn = document.getElementById("toggleModeBtn");
+toggleBtn.addEventListener("click", () => {
+  freeMode = !freeMode;
+
+  if (!freeMode) {
+    // ★ 通常モードに戻るときに確認
+    const start = confirm("黒番から打ち始めますか？（キャンセルすると白番開始）");
+    blackTurn = start ? true : false;
+  }
+
+  // ボタンの表示更新
+  toggleBtn.textContent = freeMode ? "通常モードに切替" : "自由配置モードに切替";
+
+  // 自由配置専用UIの表示切替
+  document.getElementById("freeModeControls").style.display = freeMode ? "block" : "none";
+
+  // 通常モードに戻るときは配置チェックをクリア
+  if (!freeMode) {
+    placeBlack.checked = false;
+    placeWhite.checked = false;
+  }
+});
+
+
 
 
 
