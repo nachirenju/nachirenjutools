@@ -44,14 +44,22 @@
   background:#fff; border:2px solid #333; padding:15px;
   z-index:2100; box-shadow:0 0 15px rgba(0,0,0,0.5); text-align:center;">
   <h3>PNGプレビュー（指定範囲）</h3>
+  <div>
+    <label>余白(路数): 
+      <input type="number" id="cropMargin" value="2" min="0" max="10">
+    </label>
+  </div>
+  <div style="margin-top:5px;">
+    <label><input type="checkbox" id="showOuterFrame" checked> 外枠を描画</label><br>
+    <label><input type="checkbox" id="showExtraMargin" checked> 上下左右の外側余白を追加</label><br>
+    <label><input type="checkbox" id="showCoordinates" checked> 座標を表示</label><br>
+  </div>
   <div id="pngPreviewContent" style="margin-top:10px;"></div>
   <br>
-  <label>余白(路数): 
-  <input type="number" id="cropMargin" value="2" min="0" max="5">
-</label>
   <button id="downloadCropPngBtn">保存</button>
   <button id="closePngPreview">閉じる</button>
 </div>
+
 
 
 
@@ -861,8 +869,12 @@ document.getElementById("saveBoardCropBtn").addEventListener("click", () => {
 // --- プレビュー更新関数 ---
 function updateCropPreview() {
   const marginRoutes = parseInt(document.getElementById("cropMargin").value) || 2;
+  const showOuterFrame   = document.getElementById("showOuterFrame").checked;
+  const showExtraMargin  = document.getElementById("showExtraMargin").checked;
+  const showCoordinates  = document.getElementById("showCoordinates").checked;
+ 
 
-  // 石とラベルの最小/最大座標を探索
+  // 石とラベルの範囲を探索
   let xs = [], ys = [];
   moves.forEach(m => { xs.push(m.x); ys.push(m.y); });
   labels.forEach(l => { xs.push(l.x); ys.push(l.y); });
@@ -878,15 +890,25 @@ function updateCropPreview() {
   let minY = Math.max(0, Math.min(...ys) - marginRoutes);
   let maxY = Math.min(size - 1, Math.max(...ys) + marginRoutes);
 
-  // 描画範囲
-  const croppedCanvas = renderBoardCrop(moves, labels, minX, maxX, minY, maxY);
+  if (showExtraMargin) {
+    minX = Math.max(0, minX - 1);
+    maxX = Math.min(size - 1, maxX + 1);
+    minY = Math.max(0, minY - 1);
+    maxY = Math.min(size - 1, maxY + 1);
+  }
+
+  // 描画
+  const croppedCanvas = renderBoardCrop(
+    moves, labels, minX, maxX, minY, maxY,
+    { showOuterFrame, showCoordinates, }
+  );
 
   // プレビュー表示
   const content = document.getElementById("pngPreviewContent");
   content.innerHTML = "";
   content.appendChild(croppedCanvas);
 
-  // 保存ボタン処理を更新
+  // 保存
   document.getElementById("downloadCropPngBtn").onclick = () => {
     const link = document.createElement("a");
     link.href = croppedCanvas.toDataURL("image/png");
@@ -895,8 +917,18 @@ function updateCropPreview() {
   };
 }
 
-// --- 余白の数値が変わったら即プレビュー更新 ---
-document.getElementById("cropMargin").addEventListener("input", updateCropPreview);
+
+// --- チェックボックスや数値入力の変更で即更新 ---
+["cropMargin", "showOuterFrame", "showExtraMargin", "showCoordinates"].forEach(id => {
+  const el = document.getElementById(id);
+  if (el) {
+    el.addEventListener("input", updateCropPreview);
+  }
+});
+
+
+
+
 
 // 閉じるボタン
 document.getElementById("closePngPreview").addEventListener("click", () => {
@@ -908,8 +940,17 @@ document.getElementById("closePngPreview").addEventListener("click", () => {
 function renderBoardCrop(movesSubset, labelsSubset, minX, maxX, minY, maxY) {
   const innerSizeX = (maxX - minX) * cell;
   const innerSizeY = (maxY - minY) * cell;
-  const canvasWidth  = innerSizeX + marginLeft + marginRight;
-  const canvasHeight = innerSizeY + marginTop + marginBottom;
+
+  // チェックボックス判定
+  const showExtraMargin = document.getElementById("showExtraMargin").checked;
+
+  const marginL = showExtraMargin ? marginLeft : 0;
+  const marginR = showExtraMargin ? marginRight : 0;
+  const marginT = showExtraMargin ? marginTop : 0;
+  const marginB = showExtraMargin ? marginBottom : 0;
+
+  const canvasWidth  = innerSizeX + marginL + marginR;
+  const canvasHeight = innerSizeY + marginT + marginB;
 
   const canvas = document.createElement("canvas");
   canvas.width = canvasWidth;
@@ -924,29 +965,31 @@ function renderBoardCrop(movesSubset, labelsSubset, minX, maxX, minY, maxY) {
   ctx.strokeStyle = "black";
   ctx.lineWidth = 1;
   for (let i = minX; i <= maxX; i++) {
-    const x = marginLeft + (i - minX) * cell + 0.5;
+    const x = marginL + (i - minX) * cell + 0.5;
     ctx.beginPath();
-    ctx.moveTo(x, marginTop);
-    ctx.lineTo(x, marginTop + innerSizeY);
+    ctx.moveTo(x, marginT);
+    ctx.lineTo(x, marginT + innerSizeY);
     ctx.stroke();
   }
   for (let j = minY; j <= maxY; j++) {
-    const y = marginTop + (j - minY) * cell + 0.5;
+    const y = marginT + (j - minY) * cell + 0.5;
     ctx.beginPath();
-    ctx.moveTo(marginLeft, y);
-    ctx.lineTo(marginLeft + innerSizeX, y);
+    ctx.moveTo(marginL, y);
+    ctx.lineTo(marginL + innerSizeX, y);
     ctx.stroke();
   }
 
-  // 外枠
-  ctx.lineWidth = 2;
-  ctx.strokeRect(marginLeft + 0.5, marginTop + 0.5, innerSizeX, innerSizeY);
+  // 外枠（オプション）
+  if (document.getElementById("showOuterFrame").checked) {
+    ctx.lineWidth = 2;
+    ctx.strokeRect(marginL + 0.5, marginT + 0.5, innerSizeX, innerSizeY);
+  }
 
   // 石
   movesSubset.forEach(m => {
     if (m.x < minX || m.x > maxX || m.y < minY || m.y > maxY) return;
-    const cx = marginLeft + (m.x - minX) * cell;
-    const cy = marginTop + (maxY - m.y) * cell;
+    const cx = marginL + (m.x - minX) * cell;
+    const cy = marginT + (maxY - m.y) * cell;
 
     ctx.beginPath();
     ctx.arc(cx, cy, 12, 0, Math.PI * 2);
@@ -969,22 +1012,35 @@ function renderBoardCrop(movesSubset, labelsSubset, minX, maxX, minY, maxY) {
   ctx.textBaseline = "middle";
   labelsSubset.forEach(l => {
     if (l.x < minX || l.x > maxX || l.y < minY || l.y > maxY) return;
-    const cx = marginLeft + (l.x - minX) * cell;
-    const cy = marginTop + (maxY - l.y) * cell;
-
-    // 背景で格子を消してから描画
-    ctx.fillStyle = "#F9EBCF";
-    ctx.fillRect(cx - cell/2 + 1, cy - cell/2 + 1, cell - 2, cell - 2);
-
+    const cx = marginL + (l.x - minX) * cell;
+    const cy = marginT + (maxY - l.y) * cell;
     ctx.fillStyle = "red";
     ctx.fillText(l.text, cx, cy);
   });
 
-  // コメントも描画（既存の drawComments 再利用）
-  drawComments(ctx, canvas.width, canvas.height);
+  // 座標表示（オプション）
+  if (document.getElementById("showCoordinates").checked) {
+    ctx.fillStyle = "black";
+    ctx.font = "bold 14px sans-serif";
+
+    // 横軸
+    ctx.textAlign = "center";
+    for (let i = minX; i <= maxX; i++) {
+      ctx.fillText("ABCDEFGHIJKLMNO"[i], marginL + (i - minX) * cell, marginT + innerSizeY + 15);
+    }
+
+    // 縦軸
+    ctx.textAlign = "right";
+    ctx.textBaseline = "middle";
+    for (let j = minY; j <= maxY; j++) {
+      ctx.fillText(j + 1, marginL - 5, marginT + (maxY - j) * cell);
+    }
+  }
 
   return canvas;
 }
+
+
 
 
 
