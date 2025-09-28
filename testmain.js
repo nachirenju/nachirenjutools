@@ -850,7 +850,7 @@ if (mode === "full" && currentGame) {
     ctx.fillText(`swap: ${firstLine}`, 10, marginTop + innerSize + 75);
     ctx.fillText(`      ${secondLine}`, 10, marginTop + innerSize + 95);
   }
-}
+
 
  if (isLastFrame && typeof bresult !== "undefined") {
   const n = moves.length;
