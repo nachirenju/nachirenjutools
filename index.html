@@ -151,13 +151,12 @@
   <div id="gameBoard"></div>
   <p id="currentKifu"></p>
 
-  <!-- PNG保存ボタン -->
-  <button id="saveBoardPng">PNG保存</button>
+
 
   <!-- 保存モード切替 -->
-  <label><input type="radio" name="pngMode" value="board" checked> 盤面のみ</label>
-  <label><input type="radio" name="pngMode" value="withLabel"> 座標つき</label>
-  <label><input type="radio" name="pngMode" value="full"> 座標＋対局者＋swap</label>
+  <label><input type="radio" name="pngMode" value="board"> board only</label>
+  <label><input type="radio" name="pngMode" value="withLabel"> board + coordinates</label>
+  <label><input type="radio" name="pngMode" value="full" checked> board + coordinates + info</label>
 </div>
 
     <button id="saveBoardPng"></button>
@@ -228,5 +227,6 @@ document.getElementById("historyInner").innerHTML = t("updateHistory");
 
 </body>
 </html>
+
 
 
