@@ -107,7 +107,7 @@
 <h2 id="playerStatsTitle">プレイヤー別集計</h2>
 <input type="text" id="playerInput" placeholder="Enter player names">
 <div id="playerCandidates"></div>
-<button id="analyzePlayerBtn">Show Player statistics</button>
+<button id="analyzePlayerBtn"></button>
 <div id="playerStats"></div>
 
 <h2 id="playerTop5Title">検索したプレイヤーの5手目頻出棋譜top10</h2>
@@ -146,17 +146,7 @@
     <button id="lastMove"></button>
     <br><button id="toggleMoveNumbers"></button>
     <br>
-    <div id="gameModal" style="display:none;">
-  <div id="gameInfo"></div>
-  <div id="gameBoard"></div>
-  <p id="currentKifu"></p>
-
-
-
-  <!-- 保存モード切替 -->
-
-
-      <button id="saveBoardPng">save as PNG</button>
+    <button id="saveBoardPng"></button>
   </div>
   <div id="currentKifu"
        style="margin-top:10px; text-align:center; font-family:monospace;
@@ -224,8 +214,3 @@ document.getElementById("historyInner").innerHTML = t("updateHistory");
 
 </body>
 </html>
-
-
-
-
-
