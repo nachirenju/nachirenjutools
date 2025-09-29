@@ -154,12 +154,14 @@
 
 
   <!-- 保存モード切替 -->
-  <label><input type="radio" name="pngMode" value="board"> board only</label>
-  <label><input type="radio" name="pngMode" value="withLabel"> board + coordinates</label>
-  <label><input type="radio" name="pngMode" value="full" checked> board + coordinates + info</label>
-</div>
 
-    <button id="saveBoardPng"></button>
+  <!-- モード選択 -->
+<div style="margin:10px 0;">
+  <label><input type="radio" name="pngMode" value="board">盤面のみ</label>
+  <label><input type="radio" name="pngMode" value="withLabel">盤面＋座標</label>
+  <label><input type="radio" name="pngMode" value="full" checked>盤面＋座標＋対局者＋swap</label>
+</div>
+      <button id="saveBoardPng">save as PNG</button>
   </div>
   <div id="currentKifu"
        style="margin-top:10px; text-align:center; font-family:monospace;
@@ -227,6 +229,7 @@ document.getElementById("historyInner").innerHTML = t("updateHistory");
 
 </body>
 </html>
+
 
 
 
