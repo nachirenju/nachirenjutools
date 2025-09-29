@@ -1,0 +1,245 @@
+
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<title>連珠トーナメント集計・スワップ解析</title>
+<style>
+  body { font-family: sans-serif; padding: 1em; }
+  input, button { padding: 5px; margin: 5px; }
+  table { border-collapse: collapse; margin-top: 10px; width: 900px; }
+  th, td { border: 1px solid #ccc; padding: 5px; text-align: center; }
+</style>
+<script src="https://cdn.jsdelivr.net/npm/xlsx/dist/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/gif.js.optimized/dist/gif.js"></script>
+
+</head>
+<body>
+
+<h1>連珠トーナメント集計・スワップ解析</h1>
+
+<input type="file" id="fileInput" accept=".rif,.xml"><br>
+
+<!-- 使い方リンク -->
+<a href="#" id="showHelp">使い方</a>
+<a href="#" id="historyLink">更新履歴</a>
+<a href="freeboard.html">連珠盤</a>
+  <br>
+<a href="index.html">日本語</a> | 
+<a href="en.html">English</a> | 
+<a href="kr.html">Korean</a>
+
+<!-- モーダル用のコンテナ -->
+<div id="helpModal" style="display:none; position:fixed; top:10%; left:10%; width:80%; max-height:80%; overflow:auto; background:white; border:2px solid black; padding:1em; z-index:1000;">
+  <h2>使い方</h2>
+  <p>連珠のトーナメント集計ツールです。<a href="https://x.com/nachirenju">@nachirenju</a>が興味本位で知識0のところから製作した経緯上、ちゃんと動くか未知数です。<br>
+私自身の使用に問題はありませんでしたが、こちらを使用したことでいかなる問題が発生しても責任は負いかねます。<br>
+何かあればXアカウントのほうにご連絡ください。
+このツールとは全く関係ないですが<a href="https://www.youtube.com/channel/UCfbgN9hrrh9fmFKs8gxln5g">youtubeチャンネル</a>を所有しています。こちらも応援していただけると幸いです。</p>
+
+  <h3>〇基本的な使い方</h3>
+  <ol>
+    <li>「ファイルを選択」を押しデータベースを読み込ませます。.rifおよび.xmlが読み込み可能（データベースは<a href="https://www.renju.net/">RIF公式</a>よりダウンロード可能）<br>
+        ※RIF公式のデータベースでしか動作検証をしていません。</li>
+    <li>キーワード検索で候補を探すか、大会IDを右側の欄に直接入力します。カンマ区切りで複数入力可<br>
+    <li>入力後、「大会集計」ボタンを押すと基本データが出ます。</li>
+<li>現状、Soosrv-8,Taraguchi-10,Classic,Yamaguchi以外のトーナメントには未対応です。</li>
+(連珠の対局を検索する分にはほぼこの4つの開局規定さえ押さえれば困らないので当面更新予定なし)
+<li>プレイヤーで絞り込みは、入力したプレイヤーが参加した大会すべてがリストアップされ、他条件と連動します。
+※複数人入力の場合、入力したプレイヤー全員が参加した大会のみがリストアップされます。(カンマ区切り）
+  </ol>
+
+  <h3>〇データについて</h3>
+  <ul>
+    <li>N手目着手者勝利数のみ、決着がついた対局のみから集計してます（引き分け除外）</li>
+    <li>頻出棋譜リストに黒()という記載がありますが、これは開局において黒がN手目を打ちましたという意味です(swap履歴)<br>
+        (例)黒(1,3):Suzuki Taro,白:Sato Jiro→Suzukiさんが1,3手目、Satoさんが2,4,5手目を着手
+  </ul>
+
+  <h3>〇プレイヤー別集計</h3>
+  <ul>
+    <li>現状RIF側のname,surname,nativenameのいずれかを入力すると検索できます。</li>
+    <li>カンマ区切りで複数人の入力に対応しています。</li>
+    <li>複数人入力時、該当プレイヤー同士の対局のみが検索されます。<br>
+        (例:A,Bと入力したとき、A vs Bの対局のみが抽出。A,B,CのときはAB AC BCの組み合わせが抽出）</li>
+  </ul>
+
+  <h3>〇スワップ履歴検索</h3>
+  <ul>
+    <li>該当プレイヤーのスワップ履歴および何手目を着手したかを一覧で表示します。</li>
+    <li>現状Taraguchi-10の10題表示未対応</li>
+  </ul>
+
+  <button id="closeHelp">閉じる</button>
+</div>
+
+<div id="historyContent" style="display:none; border:1px solid #ccc; padding:10px; margin-top:5px;">
+    <button id="closeHistory" style="float:right;">閉じる</button>
+  〇更新履歴
+<li>2025/09/06 大会集計欄クリアボタンを設置、検索候補をidが大きい方から出るように変更、検索候補非表示件数を表示</li>
+  <li>09/06 プレイヤー集計に画像として保存ボタンを追加</li>
+<li>09/06 プレイヤー集計に.xlsx出力ボタンを追加</li>
+<li>09/12 プレイヤー集計の対局一覧に珠型表記。3手目着手の場合は黄文字表記</li>
+<li>09/12 大会IDのキーワード検索にプレイヤーで絞り込みを追加、スワップ履歴検索をわかりやすく
+<li>09/16 頻出棋譜リストにswap履歴を記載、珠型ごとの頻出棋譜を追加、swap履歴検索の同性同名時の処理を修正、珠型のswap履歴検索に対応</li>
+<li>09/25 対局のリンクに再現機能+GIF保存を追加</li>
+</div>
+
+
+<input type="text" id="keyword" placeholder="キーワードで検索">
+
+<label>
+  <input type="checkbox" id="matchPartial" checked>
+  部分一致
+</label>
+<label>
+  <input type="checkbox" id="matchStart">
+  先頭一致
+</label>
+<label><input type="radio" name="matchType" value="regex"> 正規表現</label>
+
+<div id="suggestions"></div>
+
+<label><input type="checkbox" class="ruleCheckbox" value="24" checked> Soosrv-8</label>
+<label><input type="checkbox" class="ruleCheckbox" value="25" checked> Taraguchi-10</label>
+<label><input type="checkbox" class="ruleCheckbox" value="1"  checked> Classic</label>
+<label><input type="checkbox" class="ruleCheckbox" value="5"  checked> Yamaguchi</label>
+
+<!-- 大会検索側 -->
+<!-- 大会検索側 -->
+<label>
+  <input type="checkbox" id="enablePlayerFilter"> プレイヤーで絞り込み
+</label>
+<input type="text" id="searchPlayerInput" placeholder="プレイヤー名を入力" style="display:none;">
+<button id="searchPlayerCandidatesBtn" style="display:none;">該当プレイヤーを検索</button>
+<div id="searchPlayerCandidates"></div>
+
+
+
+
+
+
+
+
+
+<input type="text" id="tournamentId" placeholder="大会IDを入力">
+<button id="analyzeBtn">大会集計</button>
+<button id="clearBtn">大会集計欄をクリア</button>
+
+<h2>大会勝敗統計</h2>
+<div id="stats"></div>
+
+<h2>最多スワップパターン対局例</h2>
+<div id="mostSwapExample"></div>
+
+<h2>珠型ランキング（上位10件）</h2>
+<table id="openingTable">
+  <thead><tr><th>順位</th><th>珠型名</th><th>件数</th></tr></thead>
+  <tbody></tbody>
+</table>
+
+<h2>5手目までの頻出棋譜ランキング（上位10）</h2>
+<div id="top5MovesContainer"></div>
+
+
+<h2>珠型ごとの勝率（全珠型）</h2>
+<table id="openingWinRateTable">
+  <thead><tr><th>珠型名</th><th>黒勝率</th><th>白勝率</th><th>引き分け率</th><th>対局数</th></tr></thead>
+  <tbody></tbody>
+</table>
+
+<h2>プレイヤー別集計</h2>
+<input type="text" id="playerInput" placeholder="プレイヤー名を入力">
+<div id="playerCandidates"></div> <!-- ←ここに候補を出す -->
+
+<button id="analyzePlayerBtn">集計</button>
+<div id="playerStats"></div>
+
+<h2>検索したプレイヤーの5手目頻出棋譜top10</h2>
+<div id="tournamentplayerTop5MovesContainer"></div>
+
+
+<h2>スワップ履歴検索</h2>
+<input type="text" id="swapPlayerInput" placeholder="プレイヤー名または珠型名を入力">
+<button id="searchSwapBtn">検索</button>
+<div id="swapResult"></div>
+<!-- モーダル背景（半透明の黒） -->
+<div id="modalOverlay" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%;
+     background:rgba(0,0,0,0.5); z-index:1500;"></div>
+
+<!-- ポップアップ本体 -->
+<div id="openingPopup" style="display:none; position:fixed; top:50%; left:50%; transform:translate(-50%,-50%);
+     width:70%; max-width:800px; max-height:80%; overflow:auto;
+     background:white; border-radius:10px; padding:20px; box-shadow:0 0 20px rgba(0,0,0,0.5);
+     z-index:2000;">
+  <button id="closeOpeningPopup" style="float:right;">✖</button>
+  
+  <!-- ★ サマリーを表示する領域 -->
+  <div id="openingSummary"></div>
+  
+  <!-- ★ Top10ランキングを表示する領域 -->
+  <div id="openingTop10"></div>
+</div>
+
+<!-- 棋譜再現用モーダル -->
+<div id="gameModal" style="display:none; position:fixed; top:50%; left:50%;
+    transform:translate(-50%,-50%); background:white; padding:20px; border:2px solid black;
+    z-index:3000; max-width:90%; max-height:90%; overflow:auto;">
+  <button id="closeGameModal" style="float:right;">✖</button>
+  <div id="gameInfo"></div>
+  <div id="gameBoard"></div>
+<div style="margin-top:10px; text-align:center;">
+  <button id="firstMove">≪ 全て戻す</button>
+  <button id="prev5">← 5手戻す</button>
+  <button id="prevMove">← 前の手</button>
+  <button id="nextMove">次の手 →</button>
+  <button id="next5">5手進める →</button>
+  <button id="lastMove">全て進める ≫</button>
+  <br><button id="toggleMoveNumbers">石番号を非表示</button>
+<br>
+<!-- 盤面保存ボタン -->
+  <!-- モード選択 -->
+<div style="margin:10px 0;">
+  <label><input type="radio" name="pngMode" value="board">盤面のみ</label>
+  <label><input type="radio" name="pngMode" value="withLabel">盤面＋座標</label>
+  <label><input type="radio" name="pngMode" value="full" checked>盤面＋座標＋対局者＋swap</label>
+</div>
+
+<button id="saveBoardPng">PNGで保存</button>
+</div>
+<div id="currentKifu"
+     style="margin-top:10px; text-align:center; font-family:monospace;
+            font-size:14px; white-space:pre-wrap; word-wrap:break-word;
+            width:600px; margin-left:auto; margin-right:auto; border:1px solid #ccc; padding:5px;">
+  （棋譜がここに表示されます）
+</div>
+<div id="gifControls" style="margin-top:10px; text-align:center;">
+  <h3>GIF保存</h3>
+  開始手数: <input id="gifStartMove" type="number" value="0" min="0">
+  <label><input type="radio" name="gifMode" value="board"> 盤面のみ</label>
+  <label><input type="radio" name="gifMode" value="boardCoords"> 盤面＋座標</label>
+  <label><input type="radio" name="gifMode" value="full" checked> 盤面＋座標＋対局者情報</label>
+  <br>
+  <label>更新間隔（秒）:
+    <input type="number" id="gifInterval" value="1" step="0.1" style="width:60px;">
+  </label>
+<label>最終フレーム静止（秒）: <input id="gifLastDelay" type="number" value="3" step="0.1">
+</label>
+  <button id="saveGifBtn">GIF保存</button>
+</div>
+
+
+
+  </div>
+</div>
+
+<div id="gameModalOverlay" style="display:none; position:fixed; top:0; left:0;
+    width:100%; height:100%; background:rgba(0,0,0,0.5); z-index:2500;"></div>
+
+
+
+<script src="tournamentanalysis.js" defer></script>
+
+</body>
+</html>
