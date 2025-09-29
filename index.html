@@ -146,6 +146,20 @@
     <button id="lastMove"></button>
     <br><button id="toggleMoveNumbers"></button>
     <br>
+    <div id="gameModal" style="display:none;">
+  <div id="gameInfo"></div>
+  <div id="gameBoard"></div>
+  <p id="currentKifu"></p>
+
+  <!-- PNG保存ボタン -->
+  <button id="saveBoardPng">PNG保存</button>
+
+  <!-- 保存モード切替 -->
+  <label><input type="radio" name="pngMode" value="board" checked> 盤面のみ</label>
+  <label><input type="radio" name="pngMode" value="withLabel"> 座標つき</label>
+  <label><input type="radio" name="pngMode" value="full"> 座標＋対局者＋swap</label>
+</div>
+
     <button id="saveBoardPng"></button>
   </div>
   <div id="currentKifu"
@@ -214,4 +228,5 @@ document.getElementById("historyInner").innerHTML = t("updateHistory");
 
 </body>
 </html>
+
 
