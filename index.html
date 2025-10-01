@@ -131,6 +131,7 @@
 </div>
 
 <!-- 棋譜再現モーダル -->
+ 
 <div id="tournamentGamesModal" style="display:none; position:fixed; top:10%; left:10%; 
   width:80%; height:80%; background:#fff; border:2px solid #333; overflow:auto; z-index:2000; padding:20px;">
   <button id="closeTournamentGamesModal">閉じる</button>
@@ -140,6 +141,15 @@
 <div id="tournamentGamesOverlay" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; 
   background:rgba(0,0,0,0.5); z-index:1500;"></div>
 
+<!-- Score Table ポップアップ -->
+<div id="tournamentScoreModal" style="display:none; position:fixed; top:10%; left:10%;
+  width:80%; height:80%; background:#fff; border:2px solid #333; overflow:auto; z-index:2000; padding:20px;">
+  <button id="closeTournamentScoreModal">閉じる</button>
+  <div id="tournamentScoreContent"></div>
+</div>
+
+<div id="tournamentScoreOverlay" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%;
+  background:rgba(0,0,0,0.5); z-index:1500;"></div>
 
 <div id="gameModal" style="display:none; position:fixed; top:50%; left:50%;
     transform:translate(-50%,-50%); background:white; padding:20px; border:2px solid black;
@@ -228,4 +238,3 @@ document.getElementById("historyInner").innerHTML = t("updateHistory");
 
 </body>
 </html>
-
