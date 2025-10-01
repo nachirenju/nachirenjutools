@@ -2238,7 +2238,7 @@ function renderTournamentGames(tid) {
   const tInfo = tournamentMap[tid] || {};
   const tournamentHtml = `<b>${tInfo.name || "Tournament " + tid}</b> (${tInfo.year || "-"})`;
   const titleDiv = document.createElement("div");
-  titleDiv.innerHTML = `<h3 style="margin-bottom:15px;">${tournamentHtml}</h3>`;
+  titleDiv.innerHTML = `<h3 style="margin-bottom:15px;">${tournamentHtml}     <a href="#" class="score-table-link" data-tid="${tid}">[Score Table]</a></h3>`;
   container.appendChild(titleDiv);
 
   const ul = document.createElement("ul");
@@ -2327,6 +2327,221 @@ document.getElementById("tournamentGamesOverlay").addEventListener("click", () =
   }
 });
 
+// ================================
+// スコア表構築
+// ================================
+function buildScoreTable(games, players) {
+  const n = players.length;
+
+  const table = players.map(p => ({
+    id: p.id,
+    name: `${p.surname} ${p.name}`,
+    games: Array(n).fill(null).map(() => ({ count: 0, score: 0 })), // 複数局対応
+    pt: 0, // 合計ポイント
+    bg: 0, // Bergポイント
+    nw: 0  // 勝数
+  }));
+
+  // --- 各対局を処理 ---
+games.forEach(g => {
+  const blackIdx = players.findIndex(p => p.id === g.black);
+  const whiteIdx = players.findIndex(p => p.id === g.white);
+  if (blackIdx === -1 || whiteIdx === -1) return;
+
+  // 自分 vs 自分 はスキップ
+  if (blackIdx === whiteIdx) return;
+
+  let bscore, wscore;
+  if (g.bresult == 1) { bscore = 1; wscore = 0; }
+  else if (g.bresult == 0) { bscore = 0; wscore = 1; }
+  else { bscore = 0.5; wscore = 0.5; }
+
+  table[blackIdx].games[whiteIdx].count++;
+  table[blackIdx].games[whiteIdx].score += bscore;
+
+  table[whiteIdx].games[blackIdx].count++;
+  table[whiteIdx].games[blackIdx].score += wscore;
+
+  table[blackIdx].pt += bscore;
+  table[whiteIdx].pt += wscore;
+
+  if (bscore === 1) table[blackIdx].nw++;
+  if (wscore === 1) table[whiteIdx].nw++;
+});
+
+
+  // --- Berg points ---
+  table.forEach((p, i) => {
+    p.games.forEach((cell, j) => {
+      if (!cell || cell.count === 0) return;
+      const opp = table[j];
+      const winCount = Math.floor(cell.score);   // 勝ち数
+      const drawCount = (cell.score % 1) * 2;    // 引分数
+      p.bg += winCount * opp.pt + drawCount * opp.pt * 0.5;
+    });
+  });
+
+  // --- ソート: Pt → Bg → NW （降順） ---
+  table.sort((a, b) => {
+    if (b.pt !== a.pt) return b.pt - a.pt;
+    if (b.bg !== a.bg) return b.bg - a.bg;
+    return b.nw - a.nw;
+  });
+
+  return table;
+}
+
+/// ================================
+// 単一大会のスコア表（ラウンド別表示, Pt順ソート + Excel出力）
+// ================================
+function renderTournamentScoreTable(tid) {
+  const games = allGames.filter(g => String(g.tournament) === String(tid));
+  const players = [...new Set(games.flatMap(g => [g.black, g.white]))]
+    .map(pid => allPlayers[pid]);
+
+  let table = buildScoreTable(games, players);
+
+  // ★ ソート: Pt → Bg → NW の降順
+  table.sort((a, b) => {
+    if (b.pt !== a.pt) return b.pt - a.pt;
+    if (b.bg !== a.bg) return b.bg - a.bg;
+    return b.nw - a.nw;
+  });
+
+  const maxRound = Math.max(...games.map(g => g.round || 0));
+  const tName = tournamentMap[tid]?.name || "Tournament " + tid;
+
+  let html = `<h3>${tName} - Score Table</h3>`;
+  html += `<button onclick="exportScoreTableToExcel(${tid})">Export to Excel</button>`;
+  html += `<table id="scoreTableHtml" border="1" style="border-collapse:collapse;text-align:center;margin-top:8px;">`;
+  html += `<tr><th>Pl</th><th>Player</th>`;
+  for (let r = 1; r <= maxRound; r++) html += `<th>${r}</th>`;
+  html += `<th>Pt</th><th>Bg</th><th>NW</th></tr>`;
+
+  table.forEach((p, i) => {
+    html += `<tr><td>${i + 1}</td><td style="text-align:left;">${p.name}</td>`;
+    for (let r = 1; r <= maxRound; r++) {
+      const g = games.find(
+        gm => gm.round === r && (gm.black === p.id || gm.white === p.id)
+      );
+      if (!g) {
+        html += `<td>-</td>`;
+      } else {
+        const isBlack = g.black === p.id;
+        const oppId = isBlack ? g.white : g.black;
+        const oppIdx = table.findIndex(pp => pp.id === oppId) + 1;
+
+        let score;
+        if (g.bresult === 1) score = isBlack ? "1" : "0";
+        else if (g.bresult === 0) score = isBlack ? "0" : "1";
+        else score = "½";
+
+        html += `<td>
+          <span style="font-size:10px; color:#666;">${oppIdx}</span><br>
+          <span style="font-size:14px; font-weight:bold;">${score}</span>
+        </td>`;
+      }
+    }
+    html += `<td>${p.pt}</td><td>${p.bg.toFixed(2)}</td><td>${p.nw}</td></tr>`;
+  });
+
+  html += `</table>`;
+
+  document.getElementById("tournamentScoreContent").innerHTML = html;
+  document.getElementById("tournamentScoreModal").style.display = "block";
+  document.getElementById("tournamentScoreOverlay").style.display = "block";
+}
+
+/// ================================
+// Excel 出力処理
+// ================================
+function exportScoreTableToExcel(tid) {
+  const tName = tournamentMap[tid]?.name || "Tournament_" + tid;
+  const wb = XLSX.utils.book_new();
+
+  // HTMLテーブルをワークシートに変換
+  const ws = XLSX.utils.table_to_sheet(document.getElementById("scoreTableHtml"));
+  XLSX.utils.book_append_sheet(wb, ws, "ScoreTable");
+
+  // ファイルとして保存
+  XLSX.writeFile(wb, `${tName}_ScoreTable.xlsx`);
+}
+
+
+// ================================
+// HTML 出力共通部分
+// ================================
+function renderScoreTableHtml(table) {
+  let html = `<table border="1" style="border-collapse:collapse;text-align:center;">`;
+  html += `<tr><th>Pl</th><th>Player</th>`;
+  for (let i=1; i<=table.length; i++) html += `<th>${i}</th>`;
+  html += `<th>Pt</th><th>Bg</th><th>NW</th></tr>`;
+
+  table.forEach((p, i) => {
+    html += `<tr><td>${i+1}</td><td style="text-align:left;">${p.name}</td>`;
+    
+    p.games.forEach((cell, j) => {
+      if (!cell || cell.count === 0) {
+        // 未対局（自分 vs 自分含む）
+        html += `<td>-</td>`;
+      } else {
+        // スコア表記を 0 / ½ / 1 に限定
+        let scoreStr;
+        if (cell.score === 1) scoreStr = "1";
+        else if (cell.score === 0.5) scoreStr = "½";
+        else if (cell.score === 0) scoreStr = "0";
+        else {
+          // 複数局があった場合 (例: 勝ち1 引分1 → score=1.5)
+          scoreStr = Number.isInteger(cell.score)
+            ? cell.score.toString()
+            : cell.score.toFixed(1).replace(".5","½");
+        }
+
+        html += `<td>
+          <span style="font-size:10px; color:#666;">${j+1}</span><br>
+          <span style="font-size:14px; font-weight:bold;">${scoreStr}</span>
+        </td>`;
+      }
+    });
+
+    html += `<td>${p.pt}</td><td>${p.bg.toFixed(2)}</td><td>${p.nw}</td></tr>`;
+  });
+
+  html += `</table>`;
+  return html;
+}
+
+
+ 
+
+// ================================
+// イベントリスナー
+// ================================
+document.addEventListener("click", function(e){
+  if(e.target.classList.contains("game-list-link")){
+    e.preventDefault();
+    const tid = e.target.dataset.tid;
+    renderTournamentGames(tid);
+  }
+
+  if(e.target.classList.contains("score-table-link")){
+    e.preventDefault();
+    if (e.target.dataset.multi) {
+      // 合算用
+      const tids = filteredTournaments.map(t => String(t.id)); 
+      renderMultiScoreTable(tids);
+    } else {
+      // 単一大会用
+      const tid = e.target.dataset.tid;
+      renderTournamentScoreTable(tid);
+    }
+  }
+
+  if(e.target.id === "closeTournamentScoreModal" || e.target.id === "tournamentScoreOverlay"){
+    document.getElementById("tournamentScoreModal").style.display = "none";
+    document.getElementById("tournamentScoreOverlay").style.display = "none";
+  }
+});
 
 
 
