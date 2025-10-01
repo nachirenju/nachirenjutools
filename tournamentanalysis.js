@@ -139,6 +139,7 @@ allGames = Array.from(games).map(g => {
     tournament: tid,
     tournamentName: tInfo.name || `大会ID ${tid}`,
     rule: tInfo.rule || 0,
+    round: parseInt(g.getAttribute("round") || "0", 10), 
     bresult: parseFloat(g.getAttribute("bresult")),
     opening: g.getAttribute("opening"),
     black: g.getAttribute("black"),
@@ -673,7 +674,7 @@ function showGamePopup(gameId) {
 
   document.getElementById("gameModal").style.display = "block";
   document.getElementById("gameModalOverlay").style.display = "block";
-}
+  }
 
 
 
@@ -1207,12 +1208,13 @@ document.addEventListener("DOMContentLoaded", () => {
     const filteredmultiple = allGames.filter(g => tidArray.includes(Number(g.tournament)));
     if (filteredmultiple.length === 0) { alert("該当大会なし"); return; }
 
-    const tournamentList = tidArray.map(id => {
-      const name = tournamentMap[id]?.name || `大会ID ${id}`;
-      const url = `https://www.renju.net/tournament/${id}/`;
-      return `<a href="${url}" target="_blank">${name}</a>`;
-    });
-    const tournamentHtml = tournamentList.join(", ");
+   const tournamentList = tidArray.map(id => {
+  const name = tournamentMap[id]?.name || `大会ID ${id}`;
+  const url = `https://www.renju.net/tournament/${id}/`;
+  return `<a href="${url}" target="_blank">${name}</a> 
+          (<a href="#" class="game-list-link" data-tid="${id}">Game List</a>)`;
+});
+ const tournamentHtml = tournamentList.join(", ");
 
     let blackWin=0, draw=0, whiteWin=0, totalMoves=0, blackMoves=0, whiteMoves=0, drawMoves=0;
     const openingCount={}, openingWins={};
@@ -1287,7 +1289,7 @@ document.addEventListener("DOMContentLoaded", () => {
     const totalGames = blackWin + whiteWin + draw;
 
   document.getElementById("stats").innerHTML = `
-  ${t("tournament")}: ${tournamentHtml}<br><br>
+  ${t("tournament")}: ${tournamentHtml} <a href="#" class="game-list-link" data-tid="${tid}"></a><br><br>
   ${t("gamesCount")}: ${filteredmultiple.length}<br>
   ${t("blackWins")}: ${blackWin} (${totalGames ? ((blackWin/totalGames)*100).toFixed(2) : "0.00"}%)<br>
   ${t("whiteWins")}: ${whiteWin} (${totalGames ? ((whiteWin/totalGames)*100).toFixed(2) : "0.00"}%)<br>
@@ -2215,6 +2217,116 @@ function showCopyMessage(message) {
     msg.style.display = "none";
   }, 1500); // 1.5秒で消える
 }
+
+function renderTournamentGames(tid) {
+  console.log("renderTournamentGames called tid=", tid);
+  const container = document.getElementById("tournamentGamesContent");
+  container.innerHTML = "";
+
+  const gamesInTournament = allGames.filter(g => g.tournament === String(tid));
+  if (!gamesInTournament.length) {
+    container.textContent = "該当する対局はありません";
+    return;
+  }
+
+  gamesInTournament.sort((a, b) => {
+    if ((a.round || 0) !== (b.round || 0)) return (a.round || 0) - (b.round || 0);
+    return parseInt(a.id, 10) - parseInt(b.id, 10);
+  });
+
+  // --- 大会名を上部に表示 ---
+  const tInfo = tournamentMap[tid] || {};
+  const tournamentHtml = `<b>${tInfo.name || "Tournament " + tid}</b> (${tInfo.year || "-"})`;
+  const titleDiv = document.createElement("div");
+  titleDiv.innerHTML = `<h3 style="margin-bottom:15px;">${tournamentHtml}</h3>`;
+  container.appendChild(titleDiv);
+
+  const ul = document.createElement("ul");
+  ul.style.listStyle = "none"; // 点を消す
+  ul.style.padding = "0";
+
+  
+
+ gamesInTournament.forEach(g => {
+  const li = document.createElement("li");
+  li.style.marginBottom = "10px";
+
+  const blackName = allPlayers[g.black]?.surname || g.black;
+  const whiteName = allPlayers[g.white]?.surname || g.white;
+
+  // --- フルネームを作る（比較用） ---
+  const blackFullName = allPlayers[g.black] 
+    ? `${allPlayers[g.black].surname} ${allPlayers[g.black].name}`.trim()
+    : g.black;
+
+  // --- swap 情報を黒の手目に変換 ---
+  const swapInfo = analyzeSwap(g);
+  const blackMoves = [];
+  swapInfo.moveOwners.forEach((owner, idx) => {
+    if (owner === blackFullName) {
+      blackMoves.push(idx + 1);
+    }
+  });
+
+  const swapDisplay = blackMoves.length > 0
+    ? ` (${blackMoves.join(",")})`
+    : "";
+
+  // 結果
+  let scoreText = "";
+  if (g.bresult === 1) scoreText = `<b>1:0</b>`;
+  else if (g.bresult === 0) scoreText = `<b>0:1</b>`;
+  else scoreText = `<b>0.5:0.5</b>`;
+
+  // --- 出力 ---
+  li.innerHTML = `
+    Round.${g.round || "-"} 
+    (<a href="#" class="game-popup-link" data-gameid="${g.id}">Game ${g.id}</a>) 
+    ${blackName}${swapDisplay} ${scoreText} ${whiteName}
+  `;
+
+  ul.appendChild(li);
+});
+
+
+  // ← ★ forEach の外で UL を追加
+  container.appendChild(ul);
+
+  // モーダルを開く
+  document.getElementById("tournamentGamesModal").style.display = "block";
+  document.getElementById("tournamentGamesOverlay").style.display = "block";
+  // 閉じるボタン
+document.getElementById("closeTournamentGamesModal").addEventListener("click", () => {
+  document.getElementById("tournamentGamesModal").style.display = "none";
+  document.getElementById("tournamentGamesOverlay").style.display = "none";
+});
+
+// 背景クリックでも閉じる（任意）
+document.getElementById("tournamentGamesOverlay").addEventListener("click", () => {
+  document.getElementById("tournamentGamesModal").style.display = "none";
+  document.getElementById("tournamentGamesOverlay").style.display = "none";
+});
+
+}
+
+
+
+  document.addEventListener("click", function(e){
+  // Game Listを開く
+  if(e.target.classList.contains("game-list-link")){
+    e.preventDefault();
+    const tid = e.target.dataset.tid;
+    renderTournamentGames(tid);
+  }
+
+  // Game IDをクリックしたとき
+  if(e.target.classList.contains("game-popup-link")){
+    e.preventDefault();
+    const gameId = e.target.dataset.gameid;
+    showGamePopup(gameId);  // 既存の関数を呼ぶ
+  }
+});
+
 
 
 
