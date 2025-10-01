@@ -693,8 +693,15 @@ function renderCurrentBoard() {
   const canvas = renderBoardForGif(shownMoves, mode);
   container.appendChild(canvas);
 
-  // ★ 棋譜テキストを表示
-  document.getElementById("currentKifu").textContent = shownMoves.join("");
+  // ★ 棋譜テキストの上にボタンを置いて表示
+  const kifuContainer = document.getElementById("currentKifu");
+  kifuContainer.innerHTML = `
+    <div style="margin-bottom:4px; display:flex; gap:8px;">
+      <button onclick="copyKifuString()">Copy</button>
+      <button onclick="copySgfFromGame(currentGame)">Copy as SGF</button>
+    </div>
+    <div id="kifuText">${shownMoves.join("")}</div>
+  `;
 }
 
 function drawStars(ctx, marginLeft, marginTop, cell, size) {
@@ -715,6 +722,7 @@ function drawStars(ctx, marginLeft, marginTop, cell, size) {
     ctx.fill();
   });
 }
+
 
 
 
@@ -2144,6 +2152,72 @@ document.getElementById("toggleMoveNumbers").addEventListener("click", () => {
     showMoveNumbers ? t("hideMoveNumbers") : t("showMoveNumbers"); // ★ 翻訳対応
   renderCurrentBoard();
 });
+
+function moveToSgf(move, size = 15) {
+  const colLetter = move[0];
+  const rowNumber = parseInt(move.slice(1), 10);
+
+  const colIndex = colLetter.charCodeAt(0) - "a".charCodeAt(0);
+  const rowIndex = size - rowNumber;
+
+  const sgfCol = String.fromCharCode("a".charCodeAt(0) + colIndex);
+  const sgfRow = String.fromCharCode("a".charCodeAt(0) + rowIndex);
+
+  return sgfCol + sgfRow;
+}
+
+function convertMovesToSgf(moves, size = 15) {
+  const tokens = moves.match(/[a-o][0-9]{1,2}/g);
+  if (!tokens) return "(;GM[1]SZ[15])";
+
+  let sgfMoves = "";
+  tokens.forEach((move, i) => {
+    const color = i % 2 === 0 ? "B" : "W";
+    sgfMoves += `;${color}[${moveToSgf(move, size)}]`;
+  });
+
+  return `(;GM[1]SZ[${size}]\n${sgfMoves})`;
+}
+
+function copySgfFromGame(game) {
+  const shownMoves = currentMoves.slice(0, currentIndex).join("");
+  const sgf = convertMovesToSgf(shownMoves);
+  navigator.clipboard.writeText(sgf).then(() => {
+    showCopyMessage("Copied as SGF to your clipboard.");
+  });
+}
+
+function copyKifuString() {
+  const text = document.getElementById("kifuText").textContent.trim();
+  if (text) {
+    navigator.clipboard.writeText(text).then(() => {
+      showCopyMessage("Copied diagrams to your clipboard.");
+    });
+  }
+}
+
+// ★ メッセージを一時表示する関数
+function showCopyMessage(message) {
+  let msg = document.getElementById("copyMessage");
+  if (!msg) {
+    msg = document.createElement("div");
+    msg.id = "copyMessage";
+    msg.style.color = "green";
+    msg.style.fontSize = "0.9em";
+    msg.style.marginTop = "4px";
+    document.getElementById("currentKifu").prepend(msg);
+  }
+  msg.textContent = message;
+  msg.style.display = "block";
+
+  clearTimeout(msg._timeoutId);
+  msg._timeoutId = setTimeout(() => {
+    msg.style.display = "none";
+  }, 1500); // 1.5秒で消える
+}
+
+
+
 
   // 再描画
   renderCurrentBoard();
