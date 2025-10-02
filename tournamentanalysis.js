@@ -2251,19 +2251,20 @@ function renderTournamentGames(tid) {
   const li = document.createElement("li");
   li.style.marginBottom = "10px";
 
-  const blackName = allPlayers[g.black]?.surname || g.black;
-  const whiteName = allPlayers[g.white]?.surname || g.white;
-
-  // --- フルネームを作る（比較用） ---
-  const blackFullName = allPlayers[g.black] 
+  // --- フルネーム生成 ---
+  const blackName = allPlayers[g.black] 
     ? `${allPlayers[g.black].surname} ${allPlayers[g.black].name}`.trim()
     : g.black;
+
+  const whiteName = allPlayers[g.white] 
+    ? `${allPlayers[g.white].surname} ${allPlayers[g.white].name}`.trim()
+    : g.white;
 
   // --- swap 情報を黒の手目に変換 ---
   const swapInfo = analyzeSwap(g);
   const blackMoves = [];
   swapInfo.moveOwners.forEach((owner, idx) => {
-    if (owner === blackFullName) {
+    if (owner === blackName) {
       blackMoves.push(idx + 1);
     }
   });
@@ -2287,6 +2288,7 @@ function renderTournamentGames(tid) {
 
   ul.appendChild(li);
 });
+
 
 
   // ← ★ forEach の外で UL を追加
