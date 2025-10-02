@@ -2247,20 +2247,37 @@ function renderTournamentGames(tid) {
 
   
 
- gamesInTournament.forEach(g => {
-  const li = document.createElement("li");
-  li.style.marginBottom = "10px";
+const table = document.createElement("table");
+table.style.borderCollapse = "collapse";
+table.style.marginTop = "20px";
+table.style.fontSize = "14px";
+table.style.border = "1px solid #333";
 
-  // --- フルネーム生成 ---
+// ヘッダー
+const thead = document.createElement("thead");
+thead.innerHTML = `
+  <tr>
+    <th style="border:1px solid #333; padding:3px 8px;">Round</th>
+    <th style="border:1px solid #333; padding:3px 8px;">Game ID</th>
+    <th style="border:1px solid #333; padding:3px 8px;">Black</th>
+    <th style="border:1px solid #333; padding:3px 8px;">Result</th>
+    <th style="border:1px solid #333; padding:3px 8px;">White</th>
+  </tr>
+`;
+table.appendChild(thead);
+
+const tbody = document.createElement("tbody");
+
+let currentRound = null;
+
+gamesInTournament.forEach(g => {
   const blackName = allPlayers[g.black] 
     ? `${allPlayers[g.black].surname} ${allPlayers[g.black].name}`.trim()
     : g.black;
-
   const whiteName = allPlayers[g.white] 
     ? `${allPlayers[g.white].surname} ${allPlayers[g.white].name}`.trim()
     : g.white;
 
-  // --- swap 情報を黒の手目に変換 ---
   const swapInfo = analyzeSwap(g);
   const blackMoves = [];
   swapInfo.moveOwners.forEach((owner, idx) => {
@@ -2268,31 +2285,38 @@ function renderTournamentGames(tid) {
       blackMoves.push(idx + 1);
     }
   });
+  const swapDisplay = blackMoves.length > 0 ? ` (${blackMoves.join(",")})` : "";
 
-  const swapDisplay = blackMoves.length > 0
-    ? ` (${blackMoves.join(",")})`
-    : "";
-
-  // 結果
   let scoreText = "";
   if (g.bresult === 1) scoreText = `<b>1:0</b>`;
   else if (g.bresult === 0) scoreText = `<b>0:1</b>`;
   else scoreText = `<b>0.5:0.5</b>`;
 
-  // --- 出力 ---
-  li.innerHTML = `
-    Round.${g.round || "-"} 
-    (<a href="#" class="game-popup-link" data-gameid="${g.id}">Game ${g.id}</a>) 
-    ${blackName}${swapDisplay} ${scoreText} ${whiteName}
-  `;
+  // --- ラウンドが変わったら太線を入れる ---
+  let borderTop = "1px solid #333";
+  if (currentRound !== null && currentRound !== g.round) {
+    borderTop = "3px solid #000"; // ★ラウンド区切りを太線に
+  }
+  currentRound = g.round;
 
-  ul.appendChild(li);
+  const tr = document.createElement("tr");
+  tr.innerHTML = `
+    <td style="border-left:1px solid #333; border-right:1px solid #333; border-top:${borderTop}; padding:3px 8px; text-align:center;">
+      ${g.round || "-"}
+    </td>
+    <td style="border:1px solid #333; border-top:${borderTop}; padding:3px 8px; text-align:center;">
+      <a href="#" class="game-popup-link" data-gameid="${g.id}">${g.id}</a>
+    </td>
+    <td style="border:1px solid #333; border-top:${borderTop}; padding:3px 8px;">${blackName}${swapDisplay}</td>
+    <td style="border:1px solid #333; border-top:${borderTop}; padding:3px 8px; text-align:center;">${scoreText}</td>
+    <td style="border:1px solid #333; border-top:${borderTop}; padding:3px 8px;">${whiteName}</td>
+  `;
+  tbody.appendChild(tr);
 });
 
+table.appendChild(tbody);
+container.appendChild(table);
 
-
-  // ← ★ forEach の外で UL を追加
-  container.appendChild(ul);
 
   // モーダルを開く
   document.getElementById("tournamentGamesModal").style.display = "block";
