@@ -232,6 +232,51 @@ function parseResult(g) {
   return { black: 0, white: 0, draw: 0 };
 }
 
+// === 入力局面を文字列化（x,y,color） ===
+function boardToKey(moves, size) {
+  // "x-y-color" を結合した文字列
+  return moves.map(m => `${m.x}-${m.y}-${m.color}`).sort().join("|");
+}
+
+// === 回転・反転を適用した局面を文字列化 ===
+function transformMoves(moves, size, transformFn) {
+  return moves.map(m => {
+    const {x, y} = transformFn(m.x, m.y, size);
+    return { x, y, color: m.color };
+  });
+}
+
+// === 変換関数群 ===
+function rot90(x, y, N) { return { x: N - 1 - y, y: x }; }
+function rot180(x, y, N) { return { x: N - 1 - x, y: N - 1 - y }; }
+function rot270(x, y, N) { return { x: y, y: N - 1 - x }; }
+function flipH(x, y, N) { return { x: N - 1 - x, y }; }
+function flipV(x, y, N) { return { x, y: N - 1 - y }; }   // ★上下反転追加
+
+// === 比較処理 ===
+function equalWithSymmetry(posMoves, gameMoves, size) {
+  const targetKey = boardToKey(posMoves, size);
+
+  const transforms = [
+    (x,y,N)=>({x,y}), // 恒等
+    rot90,
+    rot180,
+    rot270,
+    flipH,
+    flipV,   // ★追加
+    (x,y,N)=>rot90(...Object.values(flipH(x,y,N)),N), // 斜め対称1
+    (x,y,N)=>rot90(...Object.values(flipV(x,y,N)),N), // ★斜め対称2
+  ];
+
+  return transforms.some(fn => {
+    const moved = transformMoves(gameMoves.slice(0, posMoves.length), size, fn);
+    const key = boardToKey(moved, size);
+    return key === targetKey;
+  });
+}
+
+
+
 // === 検索処理 ===
 // === 検索処理 ===
 function searchPosition() {
@@ -252,32 +297,14 @@ function searchPosition() {
     const gamePosMoves = movesToPosMoves(seq);
 
   // 一致チェック（手順無視で盤面一致を確認）
-// 一致チェック（局面形で判定）
-let ok = true;
 
-// 入力局面の石数と同じ手数まで進めた局面を作る
-const currentBoard = Array.from({ length: size }, () => Array(size).fill(null));
-for (let i = 0; i < posMoves.length; i++) {
-  const m = gamePosMoves[i];
-  if (!m) {   // ★ 安全チェック
-    ok = false;
-    break;
-  }
-  currentBoard[m.y][m.x] = m.color;
-}
+
+// 一致チェック
+let ok = equalWithSymmetry(posMoves, gamePosMoves, size);
 if (!ok) return;
 
-// posBoardState（入力した局面）と比較
-for (let y = 0; y < size; y++) {
-  for (let x = 0; x < size; x++) {
-    if (posBoardState[y][x] !== currentBoard[y][x]) {
-      ok = false;
-      break;
-    }
-  }
-  if (!ok) break;
-}
-if (!ok) return;
+
+
 
 
 
@@ -321,14 +348,21 @@ if (!ok) return;
   const old = document.getElementById("positionResultBlock");
   if (old) old.remove();
 
-  // === 新しいブロックを作る ===
-  const block = document.createElement("div");
-  block.id = "positionResultBlock";
 
-  // タイトル
-  const title = document.createElement("h3");
-  title.textContent = "検索結果";
-  block.appendChild(title);
+
+  // === 新しいブロックを作る ===
+const block = document.createElement("div");
+block.id = "positionResultBlock";
+
+// タイトル
+const title = document.createElement("h3");
+title.textContent = "Search Result";
+block.appendChild(title);
+
+// ★ ヒット件数を表示
+const hitInfo = document.createElement("p");
+hitInfo.textContent = `The games searched: ${total} `;
+block.appendChild(hitInfo);
 
   // Moveごとの統計テーブル
   const table = document.createElement("table");
@@ -337,7 +371,7 @@ if (!ok) return;
   table.style.margin = "8px 0";
 
   const header = document.createElement("tr");
-  ["Move", "Black Win", "Draw", "White Win", "Total", "Rate"].forEach(text => {
+  ["Move", "Win", "Draw", "Loss", "Total", "Rate"].forEach(text => {
     const th = document.createElement("th");
     th.textContent = text;
     header.appendChild(th);
@@ -496,6 +530,9 @@ if (!ok) return;
 
 
 
+
+
+
 // === 盤にABCマークを描くだけ ===
 function overlayNextMoveMarks(nextStats) {
   const canvas = document.querySelector("#positionBoard canvas");
@@ -518,6 +555,7 @@ function overlayNextMoveMarks(nextStats) {
 
 
 
+
 // === ボタンイベント ===
 window.addEventListener("load", () => {
   const btn = document.getElementById("searchPositionBtn");
@@ -529,4 +567,3 @@ window.addEventListener("load", () => {
 window.addEventListener("load", () => {
   renderPositionBoard();
 });
-
