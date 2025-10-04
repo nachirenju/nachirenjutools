@@ -286,6 +286,11 @@ function searchPosition() {
   }
 
   let total = 0, blackWins = 0, whiteWins = 0, draws = 0;
+
+  // 平均手数用
+  let sumAllMoves = 0, sumBlackMoves = 0, sumWhiteMoves = 0, sumDrawMoves = 0;
+  let countBlack = 0, countWhite = 0, countDraw = 0;
+
   const nextMoveStats = {};
   const matchedGames = [];
 
@@ -296,17 +301,9 @@ function searchPosition() {
 
     const gamePosMoves = movesToPosMoves(seq);
 
-  // 一致チェック（手順無視で盤面一致を確認）
-
-
-// 一致チェック
-let ok = equalWithSymmetry(posMoves, gamePosMoves, size);
-if (!ok) return;
-
-
-
-
-
+    // 一致チェック（対称性込み）
+    let ok = equalWithSymmetry(posMoves, gamePosMoves, size);
+    if (!ok) return;
 
     // === bresult を直接解釈 ===
     let res = { black: 0, white: 0, draw: 0 };
@@ -320,25 +317,40 @@ if (!ok) return;
     whiteWins += res.white;
     draws += res.draw;
 
+    // 終局手数
+    const totalMovesInGame = gamePosMoves.length;
+    sumAllMoves += totalMovesInGame;
+    if (res.black) { sumBlackMoves += totalMovesInGame; countBlack++; }
+    if (res.white) { sumWhiteMoves += totalMovesInGame; countWhite++; }
+    if (res.draw)  { sumDrawMoves  += totalMovesInGame; countDraw++; }
+
+    // 次の一手統計
     const next = gamePosMoves[posMoves.length];
-  if (next) {
-    // ★ 入力局面ですでに石が置かれている交点はスキップ
-    const alreadyPlaced = posMoves.some(m => m.x === next.x && m.y === next.y);
-    if (!alreadyPlaced) {
-      const k = next.x + "-" + next.y;
-      if (!nextMoveStats[k]) {
-        nextMoveStats[k] = { total: 0, black: 0, white: 0, draw: 0 };
+    if (next) {
+      const alreadyPlaced = posMoves.some(m => m.x === next.x && m.y === next.y);
+      if (!alreadyPlaced) {
+        const k = next.x + "-" + next.y;
+        if (!nextMoveStats[k]) {
+          nextMoveStats[k] = {
+            total: 0, black: 0, white: 0, draw: 0,
+            sumAll: 0, sumBlack: 0, sumWhite: 0, sumDraw: 0,
+            cntBlack: 0, cntWhite: 0, cntDraw: 0
+          };
+        }
+        nextMoveStats[k].total++;
+        nextMoveStats[k].black += res.black;
+        nextMoveStats[k].white += res.white;
+        nextMoveStats[k].draw  += res.draw;
+
+        nextMoveStats[k].sumAll += totalMovesInGame;
+        if (res.black) { nextMoveStats[k].sumBlack += totalMovesInGame; nextMoveStats[k].cntBlack++; }
+        if (res.white) { nextMoveStats[k].sumWhite += totalMovesInGame; nextMoveStats[k].cntWhite++; }
+        if (res.draw)  { nextMoveStats[k].sumDraw  += totalMovesInGame; nextMoveStats[k].cntDraw++; }
       }
-      nextMoveStats[k].total++;
-      nextMoveStats[k].black += res.black;
-      nextMoveStats[k].white += res.white;
-      nextMoveStats[k].draw  += res.draw;
     }
-  }
 
-  matchedGames.push(g);
-});
-
+    matchedGames.push(g);
+  });
 
   // === 入力盤を再描画して次の一手マーク ===
   renderPositionBoard();
@@ -348,21 +360,19 @@ if (!ok) return;
   const old = document.getElementById("positionResultBlock");
   if (old) old.remove();
 
-
-
   // === 新しいブロックを作る ===
-const block = document.createElement("div");
-block.id = "positionResultBlock";
+  const block = document.createElement("div");
+  block.id = "positionResultBlock";
 
-// タイトル
-const title = document.createElement("h3");
-title.textContent = "Search Result";
-block.appendChild(title);
+  // タイトル
+  const title = document.createElement("h3");
+  title.textContent = "Search Result";
+  block.appendChild(title);
 
-// ★ ヒット件数を表示
-const hitInfo = document.createElement("p");
-hitInfo.textContent = `The games searched: ${total} `;
-block.appendChild(hitInfo);
+  // ★ ヒット件数を表示
+  const hitInfo = document.createElement("p");
+  hitInfo.textContent = `The games searched: ${total}`;
+  block.appendChild(hitInfo);
 
   // Moveごとの統計テーブル
   const table = document.createElement("table");
@@ -371,11 +381,13 @@ block.appendChild(hitInfo);
   table.style.margin = "8px 0";
 
   const header = document.createElement("tr");
-  ["Move", "Win", "Draw", "Loss", "Total", "Rate"].forEach(text => {
-    const th = document.createElement("th");
-    th.textContent = text;
-    header.appendChild(th);
-  });
+  ["Move", "Black Win", "Draw", "White Win", "Total", "Rate",
+   "AvgMoves", "AvgMoves(BlackWin)", "AvgMoves(WhiteWin)", "AvgMoves(Draw)"]
+    .forEach(text => {
+      const th = document.createElement("th");
+      th.textContent = text;
+      header.appendChild(th);
+    });
   table.appendChild(header);
 
   // All 行
@@ -385,7 +397,13 @@ block.appendChild(hitInfo);
     totalLoss += stat.white;
     totalDraw += stat.draw;
   });
+
   const allRate = total > 0 ? ((totalWin / total) * 100).toFixed(1) : "0.0";
+  const avgAll = (total > 0) ? (sumAllMoves / total).toFixed(1) : "-";
+  const avgB   = (countBlack > 0) ? (sumBlackMoves / countBlack).toFixed(1) : "-";
+  const avgW   = (countWhite > 0) ? (sumWhiteMoves / countWhite).toFixed(1) : "-";
+  const avgD   = (countDraw  > 0) ? (sumDrawMoves  / countDraw ).toFixed(1) : "-";
+
   const allRow = document.createElement("tr");
   allRow.innerHTML = `
     <td><b>All</b></td>
@@ -394,6 +412,10 @@ block.appendChild(hitInfo);
     <td>${totalLoss}</td>
     <td>${total}</td>
     <td>${allRate}%</td>
+    <td>${avgAll}</td>
+    <td>${avgB}</td>
+    <td>${avgW}</td>
+    <td>${avgD}</td>
   `;
   table.appendChild(allRow);
 
@@ -403,11 +425,15 @@ block.appendChild(hitInfo);
     const row = document.createElement("tr");
     const moveLabel = String.fromCharCode("A".charCodeAt(0) + idx);
 
-    // key "x-y" → 棋譜座標 (例: j8)
     const [x, y] = key.split("-").map(Number);
     const coord = String.fromCharCode("a".charCodeAt(0) + x) + (y + 1);
 
     const rate = stat.total > 0 ? ((stat.black / stat.total) * 100).toFixed(1) : "0.0";
+    const avgAllM = (stat.total > 0) ? (stat.sumAll / stat.total).toFixed(1) : "-";
+    const avgBM   = (stat.cntBlack > 0) ? (stat.sumBlack / stat.cntBlack).toFixed(1) : "-";
+    const avgWM   = (stat.cntWhite > 0) ? (stat.sumWhite / stat.cntWhite).toFixed(1) : "-";
+    const avgDM   = (stat.cntDraw  > 0) ? (stat.sumDraw  / stat.cntDraw ).toFixed(1) : "-";
+
     row.innerHTML = `
       <td>${moveLabel} ${coord}</td>
       <td>${stat.black}</td>
@@ -415,6 +441,10 @@ block.appendChild(hitInfo);
       <td>${stat.white}</td>
       <td>${stat.total}</td>
       <td>${rate}%</td>
+      <td>${avgAllM}</td>
+      <td>${avgBM}</td>
+      <td>${avgWM}</td>
+      <td>${avgDM}</td>
     `;
     table.appendChild(row);
   });
@@ -433,7 +463,6 @@ block.appendChild(hitInfo);
     gameTable.style.margin = "8px 0";
     gameTable.style.width = "100%";
 
-    // ヘッダー行
     const header2 = document.createElement("tr");
     ["Game ID", "Black", "Result", "White"].forEach(text => {
       const th = document.createElement("th");
@@ -442,13 +471,11 @@ block.appendChild(hitInfo);
     });
     gameTable.appendChild(header2);
 
-    // ★ゲームID降順にソート
     matchedGames.sort((a, b) => parseInt(b.id, 10) - parseInt(a.id, 10));
 
-    // ページング処理
     let shownCount = 0;
     const step = 100;
-    let moreBtn
+    let moreBtn;
 
     function renderGameRows() {
       const slice = matchedGames.slice(shownCount, shownCount + step);
@@ -460,7 +487,6 @@ block.appendChild(hitInfo);
           ? `${allPlayers[g.white].surname || ""} ${allPlayers[g.white].name || ""}`.trim()
           : g.white;
 
-        // bresult → スコア表記
         let resultStr = "";
         if (g.bresult === "1" || g.bresult === 1) resultStr = "<b>1:0</b>";
         else if (g.bresult === "0" || g.bresult === 0) resultStr = "<b>0:1</b>";
@@ -469,7 +495,6 @@ block.appendChild(hitInfo);
 
         const row = document.createElement("tr");
 
-        // Game ID (リンク)
         const tdId = document.createElement("td");
         const a = document.createElement("a");
         a.href = "#";
@@ -497,17 +522,15 @@ block.appendChild(hitInfo);
 
       shownCount += slice.length;
 
-      // ボタン制御
-      if (shownCount >= matchedGames.length && moreBtn.parentNode) {
+      if (shownCount >= matchedGames.length && moreBtn && moreBtn.parentNode) {
         moreBtn.parentNode.removeChild(moreBtn);
       }
     }
 
     block.appendChild(gameTable);
 
-    // 「もっと見る」ボタン
     if (matchedGames.length > step) {
-      const moreBtn = document.createElement("button");
+      moreBtn = document.createElement("button");
       moreBtn.textContent = "もっと見る";
       moreBtn.style.display = "block";
       moreBtn.style.margin = "10px auto";
@@ -515,7 +538,6 @@ block.appendChild(hitInfo);
       block.appendChild(moreBtn);
     }
 
-    // 最初の表示
     renderGameRows();
   } else {
     const p = document.createElement("p");
@@ -523,10 +545,8 @@ block.appendChild(hitInfo);
     block.appendChild(p);
   }
 
-  // === positionTab に追加 ===
   document.getElementById("positionTab").appendChild(block);
 }
-
 
 
 
@@ -544,6 +564,14 @@ function overlayNextMoveMarks(nextStats) {
     const [x, y] = key.split("-").map(Number);
     const cx = marginLeft + x * cell;
     const cy = marginTop + (size - 1 - y) * cell;
+
+    // ★ 背景を白円で塗る（半径14pxくらい）
+    ctx.beginPath();
+    ctx.arc(cx, cy, 14, 0, Math.PI * 2);
+    ctx.fillStyle = "#F9EBCF"; // 盤と同じ色にしてもよい
+    ctx.fill();
+
+    // 赤文字を上に描画
     ctx.fillStyle = "red";
     ctx.font = "bold 16px sans-serif";
     ctx.textAlign = "center";
