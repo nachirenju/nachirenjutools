@@ -259,8 +259,13 @@ let ok = true;
 const currentBoard = Array.from({ length: size }, () => Array(size).fill(null));
 for (let i = 0; i < posMoves.length; i++) {
   const m = gamePosMoves[i];
+  if (!m) {   // ★ 安全チェック
+    ok = false;
+    break;
+  }
   currentBoard[m.y][m.x] = m.color;
 }
+if (!ok) return;
 
 // posBoardState（入力した局面）と比較
 for (let y = 0; y < size; y++) {
@@ -273,6 +278,7 @@ for (let y = 0; y < size; y++) {
   if (!ok) break;
 }
 if (!ok) return;
+
 
 
     // === bresult を直接解釈 ===
@@ -408,6 +414,7 @@ if (!ok) return;
     // ページング処理
     let shownCount = 0;
     const step = 100;
+    let moreBtn
 
     function renderGameRows() {
       const slice = matchedGames.slice(shownCount, shownCount + step);
