@@ -205,16 +205,19 @@ function coordToIndex(pos) {
 }
 
 // === 棋譜配列 (["h8","i7",...]) → posMoves形式 ===
+// === 棋譜配列 → posMoves形式 ===
 function movesToPosMoves(moves) {
   return moves.map((m, i) => {
     if (!m || m === "-") return null;
     const { x, y } = coordToIndex(m);
     return {
-      x, y,
+      x,
+      y: size - 1 - y, // ★ ここで上下反転して入力盤に合わせる
       color: i % 2 === 0 ? "black" : "white"
     };
   }).filter(Boolean);
 }
+
 
 function parseResult(g) {
   // bresultが数値っぽければそれを返す
@@ -249,48 +252,69 @@ function flipV(x, y, N)   { return { x, y: N - 1 - y }; }
 function hashMovesNormalized(moves) {
   const arr = moves.map(m => {
     const c = (m.color === "black") ? 1 : 2;
-    // x:0-14, y:0-14, color:1/2 → 15bit にパック
     return (m.x & 31) | ((m.y & 31) << 5) | (c << 10);
   });
-  arr.sort((a, b) => a - b); // ★ ソートして順序を無視
+  arr.sort((a, b) => a - b);
   let h = 0;
   for (const code of arr) {
-    h = ((h << 5) - h + code) | 0; // 簡易ハッシュ
+    h = ((h << 5) - h + code) | 0;
   }
   return h;
 }
 
-// === 対称変換を適用したハッシュ群を生成 ===
-function generateSymmetryHashes(moves, size) {
+function movesEqualUnordered(a, b) {
+  if (a.length !== b.length) return false;
+  // 両方を (x,y,color) で文字列化してソートして比較
+  const norm = ms => ms.map(m => `${m.x},${m.y},${m.color}`).sort().join("|");
+  return norm(a) === norm(b);
+}
+function equalWithSymmetry(posMoves, gameMoves, size) {
+  const gameSlice = gameMoves.slice(0, posMoves.length);
+  if (posMoves.length !== gameSlice.length) return null;
+
+  // 石数チェック
+  const cnt = ms => ms.reduce((o,m)=>{o[m.color]++; return o;}, {black:0,white:0});
+  const a = cnt(posMoves), b = cnt(gameSlice);
+  if (a.black !== b.black || a.white !== b.white) return null;
+
+  function movesEqualUnordered(a, b) {
+    if (a.length !== b.length) return false;
+    const norm = ms => ms.map(m => `${m.x},${m.y},${m.color}`).sort().join("|");
+    return norm(a) === norm(b);
+  }
+
+  // identity
+  if (movesEqualUnordered(gameSlice, posMoves)) {
+    return { name:"identity", f:(x,y,N)=>({x,y}) };
+  }
+
   const transforms = [
-    (x,y,N)=>({x,y}),  // 恒等
-    rot90, rot180, rot270,
-    flipH, flipV,
-    (x,y,N)=>rot90(...Object.values(flipH(x,y,N)),N), // 水平反転→90°
-    (x,y,N)=>rot90(...Object.values(flipV(x,y,N)),N), // 垂直反転→90°
+    { name:"rot180", f:rot180 },
+    { name:"rot90",  f:rot90 },
+    { name:"rot270", f:rot270 },
+    { name:"flipH",  f:flipH },
+    { name:"flipV",  f:flipV },
+    { name:"flipH+rot90",
+      f:(x,y,N)=>{let t=flipH(x,y,N);return rot90(t.x,t.y,N);} },
+    { name:"flipV+rot90",
+      f:(x,y,N)=>{let t=flipV(x,y,N);return rot90(t.x,t.y,N);} },
   ];
-  return transforms.map(fn => {
-    const transformed = moves.map(m => {
-      const {x,y} = fn(m.x,m.y,size);
+
+  for (const {name,f} of transforms) {
+    const transformed = gameSlice.map(m=>{
+      const {x,y} = f(m.x,m.y,size);
       return {x,y,color:m.color};
     });
-    return hashMovesNormalized(transformed);
-  });
-}
+    if (movesEqualUnordered(transformed, posMoves)) {
+      return { name, f };
+    }
+  }
 
-// === 局面一致判定（対称性込み） ===
-function equalWithSymmetry(posMoves, gameMoves, size) {
-  const targetHash = hashMovesNormalized(posMoves);
-  const gameSlice = gameMoves.slice(0, posMoves.length);
-  const hashes = generateSymmetryHashes(gameSlice, size);
-  return hashes.includes(targetHash);
+  return null;
 }
 
 
 
-
-
-// === 検索処理 ===
 // === 検索処理 ===
 function searchPosition() {
   if (!posMoves || posMoves.length === 0) {
@@ -315,68 +339,76 @@ function searchPosition() {
     const gamePosMoves = movesToPosMoves(seq);
 
     // 一致チェック（対称性込み）
-    let ok = equalWithSymmetry(posMoves, gamePosMoves, size);
-    if (!ok) return;
+const transform = equalWithSymmetry(posMoves, gamePosMoves, size);
+if (!transform) return;
 
-    // === bresult を直接解釈 ===
-    let res = { black: 0, white: 0, draw: 0 };
-    if (g.bresult === "1" || g.bresult === 1) res.black = 1;
-    else if (g.bresult === "0" || g.bresult === 0) res.white = 1;
-    else if (g.bresult === "0.5" || g.bresult === 0.5) res.draw = 1;
+// === bresult を直接解釈 ===
+let res = { black: 0, white: 0, draw: 0 };
+if (g.bresult === "1" || g.bresult === 1) res.black = 1;
+else if (g.bresult === "0" || g.bresult === 0) res.white = 1;
+else if (g.bresult === "0.5" || g.bresult === 0.5) res.draw = 1;
 
-    // 一致した
-    total++;
-    blackWins += res.black;
-    whiteWins += res.white;
-    draws += res.draw;
+// 一致した
+total++;
+blackWins += res.black;
+whiteWins += res.white;
+draws += res.draw;
 
-    // 終局手数
-    const totalMovesInGame = gamePosMoves.length;
-    sumAllMoves += totalMovesInGame;
-    if (res.black) { sumBlackMoves += totalMovesInGame; countBlack++; }
-    if (res.white) { sumWhiteMoves += totalMovesInGame; countWhite++; }
-    if (res.draw)  { sumDrawMoves  += totalMovesInGame; countDraw++; }
+// 終局手数
+const totalMovesInGame = gamePosMoves.length;
+sumAllMoves += totalMovesInGame;
+if (res.black) { sumBlackMoves += totalMovesInGame; countBlack++; }
+if (res.white) { sumWhiteMoves += totalMovesInGame; countWhite++; }
+if (res.draw)  { sumDrawMoves  += totalMovesInGame; countDraw++; }
 
-    // 次の一手統計
-    const next = gamePosMoves[posMoves.length];
-    if (next) {
-      const alreadyPlaced = posMoves.some(m => m.x === next.x && m.y === next.y);
-      if (!alreadyPlaced) {
-        const k = next.x + "-" + next.y;
-        if (!nextMoveStats[k]) {
-          nextMoveStats[k] = {
-            total: 0, black: 0, white: 0, draw: 0,
-            sumAll: 0, sumBlack: 0, sumWhite: 0, sumDraw: 0,
-            cntBlack: 0, cntWhite: 0, cntDraw: 0,
-            games: { black: [], white: [], draw: [] } // ★ゲーム保持
-          };
-        }
-        nextMoveStats[k].total++;
-        nextMoveStats[k].black += res.black;
-        nextMoveStats[k].white += res.white;
-        nextMoveStats[k].draw  += res.draw;
+// 次の一手統計
+const next = gamePosMoves[posMoves.length];
+if (next) {
+  console.log("GameID:", g.id, "transform:", transform.name, 
+            "next raw:", next, 
+            "next transformed:", transform.f(next.x,next.y,size));
 
-        nextMoveStats[k].sumAll += totalMovesInGame;
-        if (res.black) { 
-          nextMoveStats[k].sumBlack += totalMovesInGame; 
-          nextMoveStats[k].cntBlack++; 
-          nextMoveStats[k].games.black.push(g);
-        }
-        if (res.white) { 
-          nextMoveStats[k].sumWhite += totalMovesInGame; 
-          nextMoveStats[k].cntWhite++; 
-          nextMoveStats[k].games.white.push(g);
-        }
-        if (res.draw)  { 
-          nextMoveStats[k].sumDraw  += totalMovesInGame; 
-          nextMoveStats[k].cntDraw++; 
-          nextMoveStats[k].games.draw.push(g);
-        }
-      }
+  // ★ここで「入力局面の座標系」に変換してから統計に加える
+  const {x, y} = transform.f(next.x, next.y, size);
+
+  const alreadyPlaced = posMoves.some(m => m.x === x && m.y === y);
+  if (!alreadyPlaced) {
+    const k = x + "-" + y;
+    if (!nextMoveStats[k]) {
+      nextMoveStats[k] = {
+        total: 0, black: 0, white: 0, draw: 0,
+        sumAll: 0, sumBlack: 0, sumWhite: 0, sumDraw: 0,
+        cntBlack: 0, cntWhite: 0, cntDraw: 0,
+        games: { black: [], white: [], draw: [] }
+      };
     }
+    nextMoveStats[k].total++;
+    nextMoveStats[k].black += res.black;
+    nextMoveStats[k].white += res.white;
+    nextMoveStats[k].draw  += res.draw;
 
-    matchedGames.push(g);
-  });
+    nextMoveStats[k].sumAll += totalMovesInGame;
+    if (res.black) { 
+      nextMoveStats[k].sumBlack += totalMovesInGame; 
+      nextMoveStats[k].cntBlack++; 
+      nextMoveStats[k].games.black.push(g);
+    }
+    if (res.white) { 
+      nextMoveStats[k].sumWhite += totalMovesInGame; 
+      nextMoveStats[k].cntWhite++; 
+      nextMoveStats[k].games.white.push(g);
+    }
+    if (res.draw)  { 
+      nextMoveStats[k].sumDraw  += totalMovesInGame; 
+      nextMoveStats[k].cntDraw++; 
+      nextMoveStats[k].games.draw.push(g);
+    }
+  }
+}
+
+matchedGames.push(g);
+});
+
 
   // === 入力盤を再描画して次の一手マーク ===
   renderPositionBoard();
@@ -399,6 +431,7 @@ function searchPosition() {
   const hitInfo = document.createElement("p");
   hitInfo.textContent = `The games searched: ${total}`;
   block.appendChild(hitInfo);
+
 
   // Moveごとの統計テーブル
   const table = document.createElement("table");
