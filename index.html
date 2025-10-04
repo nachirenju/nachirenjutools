@@ -8,12 +8,20 @@
   input, button { padding: 5px; margin: 5px; }
   table { border-collapse: collapse; margin-top: 10px; width: 900px; }
   th, td { border: 1px solid #ccc; padding: 5px; text-align: center; }
+  #positionTab {
+  display: none;
+
+}
+
+
+
 </style>
 <script src="https://cdn.jsdelivr.net/npm/xlsx/dist/xlsx.full.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/gif.js.optimized/dist/gif.js"></script>
 <script src="lang.js"></script>
 <script src="tournamentanalysis.js" defer></script>
+<script src="positionanalysis.js" defer></script>
 </head>
 <body>
 
@@ -52,9 +60,10 @@
   <button id="closeHistory" style="float:right;">閉じる</button>
   <div id="historyInner"></div>
 </div>
+<button onclick="showTab('tournament')">大会検索</button>
+<button onclick="showTab('position')">局面検索</button>
 
-
-<!-- 検索UI -->
+<div id="tournamentTab"><!-- 検索UI -->
 <label for="keyword" id="label_searchByKeyword"></label>
 <input type="text" id="keyword">
 <label><input type="checkbox" id="matchStart" checked> 先頭一致</label>
@@ -112,6 +121,7 @@
 
 <h2 id="playerTop5Title">検索したプレイヤーの5手目頻出棋譜top10</h2>
 <div id="tournamentplayerTop5MovesContainer"></div>
+</div>
 <!--
 <h2 id="swapSearchTitle">スワップ履歴検索</h2>
 <input type="text" id="swapPlayerInput" placeholder="プレイヤー名または珠型名を入力">
@@ -120,6 +130,7 @@
 -->
 
 <!-- 開局ポップアップ -->
+<!-- Opening Popup -->
 <div id="modalOverlay" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%;
      background:rgba(0,0,0,0.5); z-index:1500;"></div>
 <div id="openingPopup" style="display:none; position:fixed; top:50%; left:50%; transform:translate(-50%,-50%);
@@ -130,27 +141,27 @@
   <div id="openingTop10"></div>
 </div>
 
-<!-- 棋譜再現モーダル -->
- 
+<!-- Tournament Games Modal -->
+<div id="tournamentGamesOverlay" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; 
+  background:rgba(0,0,0,0.5); z-index:1500;"></div>
 <div id="tournamentGamesModal" style="display:none; position:fixed; top:10%; left:10%; 
   width:80%; height:80%; background:#fff; border:2px solid #333; overflow:auto; z-index:2000; padding:20px;">
   <button id="closeTournamentGamesModal">閉じる</button>
   <div id="tournamentGamesContent"></div> <!-- ★これ必須 -->
 </div>
 
-<div id="tournamentGamesOverlay" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; 
+<!-- Score Table Modal -->
+<div id="tournamentScoreOverlay" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%;
   background:rgba(0,0,0,0.5); z-index:1500;"></div>
-
-<!-- Score Table ポップアップ -->
 <div id="tournamentScoreModal" style="display:none; position:fixed; top:10%; left:10%;
   width:80%; height:80%; background:#fff; border:2px solid #333; overflow:auto; z-index:2000; padding:20px;">
   <button id="closeTournamentScoreModal">閉じる</button>
   <div id="tournamentScoreContent"></div>
 </div>
 
-<div id="tournamentScoreOverlay" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%;
-  background:rgba(0,0,0,0.5); z-index:1500;"></div>
-
+<!-- Game Modal -->
+<div id="gameModalOverlay" style="display:none; position:fixed; top:0; left:0;
+    width:100%; height:100%; background:rgba(0,0,0,0.5); z-index:2500;"></div>
 <div id="gameModal" style="display:none; position:fixed; top:50%; left:50%;
     transform:translate(-50%,-50%); background:white; padding:20px; border:2px solid black;
     z-index:3000; max-width:90%; max-height:90%; overflow:auto;">
@@ -167,9 +178,8 @@
     <br><button id="toggleMoveNumbers"></button>
     <br>
     <label><input type="radio" name="pngMode" value="board" checked> board</label>
-<label><input type="radio" name="pngMode" value="withLabel"> board+coordinate</label>
-<label><input type="radio" name="pngMode" value="full"> full info</label>
-
+    <label><input type="radio" name="pngMode" value="withLabel"> board+coordinate</label>
+    <label><input type="radio" name="pngMode" value="full"> full info</label>
     <button id="saveBoardPng"></button>
   </div>
   <div id="currentKifu"
@@ -194,46 +204,55 @@
     <button id="saveGifBtn"></button>
   </div>
 </div>
-<div id="gameModalOverlay" style="display:none; position:fixed; top:0; left:0;
-    width:100%; height:100%; background:rgba(0,0,0,0.5); z-index:2500;"></div>
+
+
+<div id="positionTab">
+  <h2>局面から検索</h2>
+  <div id="positionBoard"></div>
+
+
+  <button id="searchPositionBtn">Search</button>
+</div>
+<br>
+
+
+
+
+
+
+
+
+
+
 
 <script>
+document.addEventListener("DOMContentLoaded", () => {
+  applyTranslations();
 
-  document.addEventListener("DOMContentLoaded", () => {
-    applyTranslations();
+  const langSelect = document.getElementById("langSelect");
+  if (langSelect) {
+    langSelect.value = currentLang;
+    langSelect.addEventListener("change", (e) => {
+      setLang(e.target.value);
+    });
+  }
 
-    // 言語切り替えイベントもここで
-    const langSelect = document.getElementById("langSelect");
-    if (langSelect) {
-      langSelect.value = currentLang;
-      langSelect.addEventListener("change", (e) => {
-        setLang(e.target.value);
-      });
-    }
-  });
-
+  // ★ここにまとめて入れる
   document.getElementById("col_opening").textContent = t("opening");
-document.getElementById("col_blackRate").textContent = t("blackRate");
-document.getElementById("col_whiteRate").textContent = t("whiteRate");
-document.getElementById("col_drawRate").textContent = t("drawRate");  // ★追加必要
-document.getElementById("col_totalGames").textContent = t("totalGames");
-document.getElementById("col_rank").textContent = t("rankCol");
-document.getElementById("label_filterByPlayer").textContent = t("filterByPlayer");
-document.getElementById("label_searchByKeyword").textContent = t("searchByKeyword");
-document.getElementById("helpTitle").textContent = t("helpTitle"); // "使い方" / "Usage" / "사용법" / "用法"
-document.getElementById("helpDescription").innerHTML =
-  t("usage_intro") + t("usage_basic");
-document.getElementById("historyContent").querySelector("button#closeHistory").textContent = t("close");
-document.getElementById("historyInner").innerHTML = t("updateHistory");
- 
-
-
-
-
-
-
-
+  document.getElementById("col_blackRate").textContent = t("blackRate");
+  document.getElementById("col_whiteRate").textContent = t("whiteRate");
+  document.getElementById("col_drawRate").textContent = t("drawRate");
+  document.getElementById("col_totalGames").textContent = t("totalGames");
+  document.getElementById("col_rank").textContent = t("rankCol");
+  document.getElementById("label_filterByPlayer").textContent = t("filterByPlayer");
+  document.getElementById("label_searchByKeyword").textContent = t("searchByKeyword");
+  document.getElementById("helpTitle").textContent = t("helpTitle");
+  document.getElementById("helpDescription").innerHTML = t("usage_intro") + t("usage_basic");
+  document.getElementById("historyContent").querySelector("button#closeHistory").textContent = t("close");
+  document.getElementById("historyInner").innerHTML = t("updateHistory");
+});
 </script>
+
 
 
 </body>
