@@ -5,6 +5,8 @@ let playerIndex = {};
 let tournamentMap = {};
 let tournamentPlayers = {};   // ★グローバルで宣言
 
+// tournamentanalysis.js の先頭あたりにグローバルで宣言
+
 
 // opening固定定義
 const openingMap = {
@@ -626,6 +628,10 @@ function showGamePopup(gameId) {
   const g = allGames.find(x => x.id === gameId);
   if (!g) return;
   currentGame = g;
+  // 他のオーバーレイを消す
+document.querySelectorAll("#modalOverlay, #tournamentGamesOverlay, #tournamentScoreOverlay")
+  .forEach(el => el.style.display = "none");
+
 
   // --- 大会情報を取得 ---
   let tournamentName = "";
@@ -658,13 +664,20 @@ function showGamePopup(gameId) {
     return `${idx+1}手目:${surname}`;
   }).join("　");
 
-  // --- HTML出力 ---
-  document.getElementById("gameInfo").innerHTML = `
-    <p><b>${tournamentName}</b> (${tournamentYear})</p>
-    <p><b>${t("black")}:</b> ${blackName}　<b>${t("white")}:</b> ${whiteName}</p>
-    <p><b>${t("result")}:</b> ${resultText}</p>
-    <p><b>swap:</b> ${swapMoves}</p>
-  `;
+// ゲームリンクのURL（例: renju.net）
+const gameUrl = `https://www.renju.net/tournament/${g.tournament}/game/${g.id}/`;
+
+// --- HTML出力 ---
+document.getElementById("gameInfo").innerHTML = `
+  <p><b>${tournamentName}</b> (${tournamentYear})</p>
+  <p>
+    <b>${t("black")}:</b> ${blackName}　
+    <b>${t("white")}:</b> ${whiteName}
+    <a href="${gameUrl}" target="_blank" style="margin-left:10px;">Game${g.id}</a>
+  </p>
+  <p><b>${t("result")}:</b> ${resultText}</p>
+  <p><b>swap:</b> ${swapMoves}</p>
+`;
 
   // 棋譜配列
   currentMoves = g.moves.split(/\s+/).filter(m => m);
@@ -891,6 +904,7 @@ if (mode === "full" && currentGame) {
 
   return canvas;
 }
+
 
 
 
@@ -2568,6 +2582,25 @@ document.addEventListener("click", function(e){
     document.getElementById("tournamentScoreOverlay").style.display = "none";
   }
 });
+
+function showTab(tabId) {
+  console.log("showTab called:", tabId);
+
+  // すべてのタブを非表示にする
+  document.querySelectorAll("#tournamentTab, #positionTab").forEach(div => {
+    div.style.display = "none";
+  });
+
+  // 指定タブを表示
+  const el = document.getElementById(tabId + "Tab");
+  if (el) {
+    el.style.display = "block";
+    console.log("showing", tabId + "Tab");
+  } else {
+    console.error("Tab not found:", tabId + "Tab");
+  }
+}
+
 
 
 
