@@ -337,7 +337,7 @@ if (!ok) return;
   table.style.margin = "8px 0";
 
   const header = document.createElement("tr");
-  ["Move", "Win", "Draw", "Loss", "Total", "Rate"].forEach(text => {
+  ["Move", "Black Win", "Draw", "White Win", "Total", "Rate"].forEach(text => {
     const th = document.createElement("th");
     th.textContent = text;
     header.appendChild(th);
@@ -529,3 +529,4 @@ window.addEventListener("load", () => {
 window.addEventListener("load", () => {
   renderPositionBoard();
 });
+
