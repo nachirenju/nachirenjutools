@@ -238,42 +238,55 @@ function boardToKey(moves, size) {
   return moves.map(m => `${m.x}-${m.y}-${m.color}`).sort().join("|");
 }
 
-// === 回転・反転を適用した局面を文字列化 ===
-function transformMoves(moves, size, transformFn) {
-  return moves.map(m => {
-    const {x, y} = transformFn(m.x, m.y, size);
-    return { x, y, color: m.color };
+// === 基本変換関数 ===
+function rot90(x, y, N)   { return { x: N - 1 - y, y: x }; }
+function rot180(x, y, N)  { return { x: N - 1 - x, y: N - 1 - y }; }
+function rot270(x, y, N)  { return { x: y, y: N - 1 - x }; }
+function flipH(x, y, N)   { return { x: N - 1 - x, y }; }
+function flipV(x, y, N)   { return { x, y: N - 1 - y }; }
+
+// === ハッシュ化（局面一致用：順序無視） ===
+function hashMovesNormalized(moves) {
+  const arr = moves.map(m => {
+    const c = (m.color === "black") ? 1 : 2;
+    // x:0-14, y:0-14, color:1/2 → 15bit にパック
+    return (m.x & 31) | ((m.y & 31) << 5) | (c << 10);
   });
+  arr.sort((a, b) => a - b); // ★ ソートして順序を無視
+  let h = 0;
+  for (const code of arr) {
+    h = ((h << 5) - h + code) | 0; // 簡易ハッシュ
+  }
+  return h;
 }
 
-// === 変換関数群 ===
-function rot90(x, y, N) { return { x: N - 1 - y, y: x }; }
-function rot180(x, y, N) { return { x: N - 1 - x, y: N - 1 - y }; }
-function rot270(x, y, N) { return { x: y, y: N - 1 - x }; }
-function flipH(x, y, N) { return { x: N - 1 - x, y }; }
-function flipV(x, y, N) { return { x, y: N - 1 - y }; }   // ★上下反転追加
-
-// === 比較処理 ===
-function equalWithSymmetry(posMoves, gameMoves, size) {
-  const targetKey = boardToKey(posMoves, size);
-
+// === 対称変換を適用したハッシュ群を生成 ===
+function generateSymmetryHashes(moves, size) {
   const transforms = [
-    (x,y,N)=>({x,y}), // 恒等
-    rot90,
-    rot180,
-    rot270,
-    flipH,
-    flipV,   // ★追加
-    (x,y,N)=>rot90(...Object.values(flipH(x,y,N)),N), // 斜め対称1
-    (x,y,N)=>rot90(...Object.values(flipV(x,y,N)),N), // ★斜め対称2
+    (x,y,N)=>({x,y}),  // 恒等
+    rot90, rot180, rot270,
+    flipH, flipV,
+    (x,y,N)=>rot90(...Object.values(flipH(x,y,N)),N), // 水平反転→90°
+    (x,y,N)=>rot90(...Object.values(flipV(x,y,N)),N), // 垂直反転→90°
   ];
-
-  return transforms.some(fn => {
-    const moved = transformMoves(gameMoves.slice(0, posMoves.length), size, fn);
-    const key = boardToKey(moved, size);
-    return key === targetKey;
+  return transforms.map(fn => {
+    const transformed = moves.map(m => {
+      const {x,y} = fn(m.x,m.y,size);
+      return {x,y,color:m.color};
+    });
+    return hashMovesNormalized(transformed);
   });
 }
+
+// === 局面一致判定（対称性込み） ===
+function equalWithSymmetry(posMoves, gameMoves, size) {
+  const targetHash = hashMovesNormalized(posMoves);
+  const gameSlice = gameMoves.slice(0, posMoves.length);
+  const hashes = generateSymmetryHashes(gameSlice, size);
+  return hashes.includes(targetHash);
+}
+
+
 
 
 
@@ -334,7 +347,8 @@ function searchPosition() {
           nextMoveStats[k] = {
             total: 0, black: 0, white: 0, draw: 0,
             sumAll: 0, sumBlack: 0, sumWhite: 0, sumDraw: 0,
-            cntBlack: 0, cntWhite: 0, cntDraw: 0
+            cntBlack: 0, cntWhite: 0, cntDraw: 0,
+            games: { black: [], white: [], draw: [] } // ★ゲーム保持
           };
         }
         nextMoveStats[k].total++;
@@ -343,9 +357,21 @@ function searchPosition() {
         nextMoveStats[k].draw  += res.draw;
 
         nextMoveStats[k].sumAll += totalMovesInGame;
-        if (res.black) { nextMoveStats[k].sumBlack += totalMovesInGame; nextMoveStats[k].cntBlack++; }
-        if (res.white) { nextMoveStats[k].sumWhite += totalMovesInGame; nextMoveStats[k].cntWhite++; }
-        if (res.draw)  { nextMoveStats[k].sumDraw  += totalMovesInGame; nextMoveStats[k].cntDraw++; }
+        if (res.black) { 
+          nextMoveStats[k].sumBlack += totalMovesInGame; 
+          nextMoveStats[k].cntBlack++; 
+          nextMoveStats[k].games.black.push(g);
+        }
+        if (res.white) { 
+          nextMoveStats[k].sumWhite += totalMovesInGame; 
+          nextMoveStats[k].cntWhite++; 
+          nextMoveStats[k].games.white.push(g);
+        }
+        if (res.draw)  { 
+          nextMoveStats[k].sumDraw  += totalMovesInGame; 
+          nextMoveStats[k].cntDraw++; 
+          nextMoveStats[k].games.draw.push(g);
+        }
       }
     }
 
@@ -434,24 +460,81 @@ function searchPosition() {
     const avgWM   = (stat.cntWhite > 0) ? (stat.sumWhite / stat.cntWhite).toFixed(1) : "-";
     const avgDM   = (stat.cntDraw  > 0) ? (stat.sumDraw  / stat.cntDraw ).toFixed(1) : "-";
 
-    row.innerHTML = `
-      <td>${moveLabel} ${coord}</td>
-      <td>${stat.black}</td>
-      <td>${stat.draw}</td>
-      <td>${stat.white}</td>
-      <td>${stat.total}</td>
-      <td>${rate}%</td>
-      <td>${avgAllM}</td>
-      <td>${avgBM}</td>
-      <td>${avgWM}</td>
-      <td>${avgDM}</td>
-    `;
+    // Move
+    const tdMove = document.createElement("td");
+    tdMove.textContent = `${moveLabel} ${coord}`;
+    row.appendChild(tdMove);
+
+    // Black Win
+const tdBlack = document.createElement("td");
+if (stat.games.black.length > 0) {
+  tdBlack.innerHTML = `<b>${stat.black}</b>`;
+  tdBlack.style.cursor = "pointer";
+  tdBlack.style.color = "blue";
+  tdBlack.onclick = () => showGameListPopup(stat.games.black, `${coord} - Black Win`);
+} else {
+  tdBlack.textContent = stat.black;
+}
+row.appendChild(tdBlack);
+
+// Draw
+const tdDraw = document.createElement("td");
+if (stat.games.draw.length > 0) {
+  tdDraw.innerHTML = `<b>${stat.draw}</b>`;
+  tdDraw.style.cursor = "pointer";
+  tdDraw.style.color = "blue";
+  tdDraw.onclick = () => showGameListPopup(stat.games.draw, `${coord} - Draw`);
+} else {
+  tdDraw.textContent = stat.draw;
+}
+row.appendChild(tdDraw);
+
+// White Win
+const tdWhite = document.createElement("td");
+if (stat.games.white.length > 0) {
+  tdWhite.innerHTML = `<b>${stat.white}</b>`;
+  tdWhite.style.cursor = "pointer";
+  tdWhite.style.color = "blue";
+  tdWhite.onclick = () => showGameListPopup(stat.games.white, `${coord} - White Win`);
+} else {
+  tdWhite.textContent = stat.white;
+}
+row.appendChild(tdWhite);
+
+
+    // Total
+    const tdTotal = document.createElement("td");
+    tdTotal.textContent = stat.total;
+    row.appendChild(tdTotal);
+
+    // Rate
+    const tdRate = document.createElement("td");
+    tdRate.textContent = `${rate}%`;
+    row.appendChild(tdRate);
+
+    // AvgMoves
+    const tdAvgAll = document.createElement("td");
+    tdAvgAll.textContent = avgAllM;
+    row.appendChild(tdAvgAll);
+
+    const tdAvgB = document.createElement("td");
+    tdAvgB.textContent = avgBM;
+    row.appendChild(tdAvgB);
+
+    const tdAvgW = document.createElement("td");
+    tdAvgW.textContent = avgWM;
+    row.appendChild(tdAvgW);
+
+    const tdAvgD = document.createElement("td");
+    tdAvgD.textContent = avgDM;
+    row.appendChild(tdAvgD);
+
     table.appendChild(row);
   });
 
   block.appendChild(table);
 
-  // --- 対局リスト ---
+  // --- 対局リスト（全体） ---
   if (matchedGames.length > 0) {
     const listTitle = document.createElement("h4");
     listTitle.textContent = "該当対局一覧";
@@ -546,6 +629,99 @@ function searchPosition() {
   }
 
   document.getElementById("positionTab").appendChild(block);
+}
+
+// === ゲームリストをモーダル表示 ===
+function showGameListPopup(games, titleText) {
+  // 既存のモーダルを削除
+  let old = document.getElementById("gameListPopup");
+  if (old) old.remove();
+
+  const overlay = document.createElement("div");
+  overlay.id = "gameListPopup";
+  overlay.style.position = "fixed";
+  overlay.style.top = "0";
+  overlay.style.left = "0";
+  overlay.style.width = "100%";
+  overlay.style.height = "100%";
+  overlay.style.backgroundColor = "rgba(0,0,0,0.5)";
+  overlay.style.zIndex = "2000";
+  overlay.onclick = () => overlay.remove();
+
+  const box = document.createElement("div");
+  box.style.position = "absolute";
+  box.style.top = "50%";
+  box.style.left = "50%";
+  box.style.transform = "translate(-50%, -50%)";
+  box.style.background = "white";
+  box.style.padding = "20px";
+  box.style.maxHeight = "80%";
+  box.style.overflowY = "auto";
+  box.style.width = "80%";
+
+  const h3 = document.createElement("h3");
+  h3.textContent = titleText;
+  box.appendChild(h3);
+
+  const table = document.createElement("table");
+  table.border = "1";
+  table.style.borderCollapse = "collapse";
+  table.style.width = "100%";
+
+  const header = document.createElement("tr");
+  ["Game ID", "Black", "Result", "White"].forEach(t => {
+    const th = document.createElement("th");
+    th.textContent = t;
+    header.appendChild(th);
+  });
+  table.appendChild(header);
+
+   games.sort((a, b) => parseInt(b.id, 10) - parseInt(a.id, 10));
+
+  games.forEach(g => {
+    const row = document.createElement("tr");
+
+    // Game ID
+    const tdId = document.createElement("td");
+    const a = document.createElement("a");
+    a.href = "#";
+    a.textContent = g.id;
+    a.onclick = () => { showGamePopup(g.id); return false; };
+    tdId.appendChild(a);
+
+    // Black full name
+    const blackFull = allPlayers[g.black]
+      ? `${allPlayers[g.black].surname || ""} ${allPlayers[g.black].name || ""}`.trim()
+      : g.black;
+    const tdBlack = document.createElement("td");
+    tdBlack.textContent = blackFull;
+
+    // Result
+    const tdResult = document.createElement("td");
+    if (g.bresult === "1" || g.bresult === 1) tdResult.innerHTML = "<b>1:0</b>";
+    else if (g.bresult === "0" || g.bresult === 0) tdResult.innerHTML = "<b>0:1</b>";
+    else if (g.bresult === "0.5" || g.bresult === 0.5) tdResult.innerHTML = "<b>0.5:0.5</b>";
+    else tdResult.textContent = g.bresult;
+    tdResult.style.textAlign = "center";
+
+    // White full name
+    const whiteFull = allPlayers[g.white]
+      ? `${allPlayers[g.white].surname || ""} ${allPlayers[g.white].name || ""}`.trim()
+      : g.white;
+    const tdWhite = document.createElement("td");
+    tdWhite.textContent = whiteFull;
+
+    row.appendChild(tdId);
+    row.appendChild(tdBlack);
+    row.appendChild(tdResult);
+    row.appendChild(tdWhite);
+
+    table.appendChild(row);
+  });
+
+  box.appendChild(table);
+  overlay.appendChild(box);
+  document.body.appendChild(overlay);
 }
 
 
