@@ -2195,7 +2195,11 @@ function convertMovesToSgf(moves, size = 15) {
 }
 
 function copySgfFromGame(game) {
-  const shownMoves = currentMoves.slice(0, currentIndex).join("");
+  // renjuboard の場合は currentMoves を使用
+  const shownMoves = (typeof currentMoves !== "undefined" && currentMoves.length)
+    ? currentMoves.join("")
+    : (game ? game.movesString : "");
+
   const sgf = convertMovesToSgf(shownMoves);
   navigator.clipboard.writeText(sgf).then(() => {
     showCopyMessage("Copied as SGF to your clipboard.");
