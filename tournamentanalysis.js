@@ -65,12 +65,13 @@ if (fileInput) {
     const file = e.target.files[0];
     if (!file) return;
     const reader = new FileReader();
+
     reader.onload = function(event) {
       const text = event.target.result;
       const parser = new DOMParser();
       const xmlDoc = parser.parseFromString(text, "text/xml");
 
-      // プレイヤー情報の格納部分
+      // --- プレイヤー情報 ---
       allPlayers = {};
       playerIndex = {};
       const players = xmlDoc.getElementsByTagName("player");
@@ -83,7 +84,6 @@ if (fileInput) {
 
         allPlayers[id] = { id, name, surname, native_name };
 
-        // 検索用キーを準備
         const lowerName = name.toLowerCase();
         const lowerSurname = surname.toLowerCase();
         const lowerNative = native_name.toLowerCase();
@@ -97,83 +97,75 @@ if (fileInput) {
           }
         });
       });
+
+      // --- 大会情報 ---
+      tournamentMap = {}; // 初期化
+      const tournaments = xmlDoc.getElementsByTagName("tournament");
+
+      Array.from(tournaments).forEach(t => {
+        const id = t.getAttribute("id");
+        const name = t.getAttribute("name");
+        const country = t.getAttribute("country");
+        const city = t.getAttribute("city");
+        const year = parseInt(t.getAttribute("year"), 10);
+        const month = parseInt(t.getAttribute("month"), 10);
+        const start = t.getAttribute("start");
+        const end = t.getAttribute("end");
+        const rule = parseInt(t.getAttribute("rule"), 10);
+        const rated = t.getAttribute("rated") === "1";
+
+        tournamentMap[id] = {
+          id, name, country, city, year, month, start, end, rule, rated
+        };
+      });
+
+      // --- allTournaments 作成 ---
+      allTournaments = Object.entries(tournamentMap).map(([id, info]) => {
+        return {
+          id: Number(id),
+          name: info.name,
+          rule: info.rule,
+          year: info.year
+        };
+      });
+
+      // --- 対局情報 ---
+      const games = xmlDoc.getElementsByTagName("game");
+      allGames = Array.from(games).map(g => {
+        const tid = g.getAttribute("tournament");
+        const tInfo = tournamentMap[tid] || {};
+        return {
+          id: g.getAttribute("id"),
+          tournament: tid,
+          tournamentName: tInfo.name || `大会ID ${tid}`,
+          rule: tInfo.rule || 0,
+          round: parseInt(g.getAttribute("round") || "0", 10),
+          bresult: parseFloat(g.getAttribute("bresult")),
+          opening: g.getAttribute("opening"),
+          black: g.getAttribute("black"),
+          white: g.getAttribute("white"),
+          swap: g.getAttribute("swap"),
+          moves: g.getElementsByTagName("move")[0]?.textContent.trim() || ""
+        };
+      });
+
+      // --- 大会ごとの参加プレイヤー集合 ---
+      tournamentPlayers = {};
+      allGames.forEach(g => {
+        if (!tournamentPlayers[g.tournament]) {
+          tournamentPlayers[g.tournament] = new Set();
+        }
+        tournamentPlayers[g.tournament].add(g.black);
+        tournamentPlayers[g.tournament].add(g.white);
+      });
+
+      // --- 完了メッセージ ---
+      alert(t("loadingComplete", allGames.length));
     };
+
     reader.readAsText(file);
   });
 }
-
-
-
-  // 大会情報の格納部分
-tournamentMap = {}; // 初期化
-const tournaments = xmlDoc.getElementsByTagName("tournament");
-
-Array.from(tournaments).forEach(t => {
-  const id = t.getAttribute("id");
-  const name = t.getAttribute("name");
-  const country = t.getAttribute("country");
-  const city = t.getAttribute("city");
-  const year = parseInt(t.getAttribute("year"), 10);
-  const month = parseInt(t.getAttribute("month"), 10);
-  const start = t.getAttribute("start");
-  const end = t.getAttribute("end");
-  const rule = parseInt(t.getAttribute("rule"), 10);
-  const rated = t.getAttribute("rated") === "1";
-
-  tournamentMap[id] = { 
-    id, name, country, city, year, month, start, end, rule, rated 
-  };
-});
-
-
-// ←ここに allGames を作る
-allTournaments = Object.entries(tournamentMap).map(([id, info]) => {
-  return {
-    id: Number(id),
-    name: info.name,
-    rule: info.rule,
-    year: info.year
-  };
-});
-
-
-
-// 対局情報
-const games = xmlDoc.getElementsByTagName("game");
-allGames = Array.from(games).map(g => {
-  const tid = g.getAttribute("tournament");
-  const tInfo = tournamentMap[tid] || {};
-  return {
-    id: g.getAttribute("id"),
-    tournament: tid,
-    tournamentName: tInfo.name || `大会ID ${tid}`,
-    rule: tInfo.rule || 0,
-    round: parseInt(g.getAttribute("round") || "0", 10), 
-    bresult: parseFloat(g.getAttribute("bresult")),
-    opening: g.getAttribute("opening"),
-    black: g.getAttribute("black"),
-    white: g.getAttribute("white"),
-    swap: g.getAttribute("swap"),
-    moves: g.getElementsByTagName("move")[0]?.textContent.trim() || ""
-  };
-});
-
-// ★ここで大会ごとの参加プレイヤー集合を構築
-tournamentPlayers = {};
-allGames.forEach(g => {
-  if (!tournamentPlayers[g.tournament]) {
-    tournamentPlayers[g.tournament] = new Set();
-  }
-  tournamentPlayers[g.tournament].add(g.black);
-  tournamentPlayers[g.tournament].add(g.white);
-});
-
-// ★ 翻訳対応 alert
-    alert(t("loadingComplete", allGames.length));
-
-  };
-  reader.readAsText(file);
-});
 
  const showHelp = document.getElementById("showHelp");
   const helpModal = document.getElementById("helpModal");
