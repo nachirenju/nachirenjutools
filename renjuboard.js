@@ -901,3 +901,15 @@ labelsSubset.forEach(l => {
 
   return canvas;
 }
+
+document.getElementById("copySgfBtn").addEventListener("click", () => {
+  // renjuboard.js 内で使用している棋譜配列を currentMoves にセットしておく
+  window.currentMoves = moves.map(m => {
+    const letter = String.fromCharCode("a".charCodeAt(0) + m.x - 1);
+    return letter + m.y; // 例: h8, i9 のような形式
+  });
+  window.currentIndex = currentMoves.length;
+
+  copySgfFromGame(); // tournamentanalysis.js 側の関数を呼び出す
+});
+
