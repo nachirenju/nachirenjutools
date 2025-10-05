@@ -175,7 +175,7 @@
       }
     }
 
-    // --- クリック処理 ---
+// --- クリック処理 ---
 function handleClick(e, button) {
   const rect = e.target.getBoundingClientRect();
   const x = Math.round((e.clientX - rect.left - marginLeft) / cell);
@@ -183,15 +183,49 @@ function handleClick(e, button) {
 
   if (x < 0 || y < 0 || x >= size || y >= size) return;
 
-  // ★ ラベル入力モード
-  if (document.getElementById("inputNumber").checked) {
-    labels.push({ x, y, text: String(nextNumber++) });
-    renderBoard();
-    return;
-  }
-  if (document.getElementById("inputAlpha").checked) {
-    labels.push({ x, y, text: String.fromCharCode(nextAlphaCode++) });
-    renderBoard();
+  // ★ 任意ラベル入力モード
+  const labelMode = document.getElementById("enableCustomLabel").checked;
+  if (labelMode) {
+    const inputEl = document.getElementById("labelInputText");
+    const text = inputEl.value.trim().slice(0, 3);
+    if (text) {
+      // === ラベルを追加または上書き ===
+      const existing = labels.find(l => l.x === x && l.y === y);
+      if (existing) {
+        existing.text = text;
+      } else {
+        labels.push({ x, y, text });
+      }
+      renderBoard();
+
+      // === 入力内容に応じて次の値を自動更新 ===
+      // [1] アルファベット一文字（大文字 or 小文字）
+      if (/^[A-Za-z]$/.test(text)) {
+        const code = text.charCodeAt(0);
+        let next = text;
+        if (text >= "A" && text <= "Z") {
+          next = (code < 90) ? String.fromCharCode(code + 1) : "A";
+        } else if (text >= "a" && text <= "z") {
+          next = (code < 122) ? String.fromCharCode(code + 1) : "a";
+        }
+        inputEl.value = next;
+      }
+      // [2] 数字のみ
+      else if (/^[0-9]+$/.test(text)) {
+        inputEl.value = String(parseInt(text, 10) + 1);
+      }
+      // [3] アルファベット＋数字（例: a1, B3）
+      else if (/^([A-Za-z])([0-9]+)$/.test(text)) {
+        const match = text.match(/^([A-Za-z])([0-9]+)$/);
+        const alpha = match[1];
+        const num = parseInt(match[2], 10) + 1;
+        inputEl.value = alpha + num;
+      }
+      // [4] その他（記号など）はそのまま
+      else {
+        inputEl.value = text;
+      }
+    }
     return;
   }
 
@@ -251,22 +285,22 @@ function handleClick(e, button) {
       const moveNumber = moves.filter(m => m.number !== null).length + 1;
       boardState[y][x] = color;
       moves.push({ x, y, color, number: moveNumber });
-      redoStack = []; // 新規着手で未来を消す
+      redoStack = [];
       blackTurn = !blackTurn;
     } else if (button === "right") {
       const last = moves.pop();
       if (last) {
         boardState[last.y][last.x] = null;
-        if (last.number !== null) {
-          blackTurn = (last.color === "black");
-        }
-        redoStack.push(last); // 戻した手を redoStack に入れる
+        if (last.number !== null) blackTurn = (last.color === "black");
+        redoStack.push(last);
       }
     }
   }
 
   renderBoard();
 }
+
+
 
     // ★ 追加: 削除ボタン
     document.getElementById("clearLabels").addEventListener("click", () => {
@@ -276,14 +310,36 @@ function handleClick(e, button) {
       renderBoard();
     });
 
-    // --- PNG保存 ---
-    document.getElementById("saveBoardPng").addEventListener("click", () => {
-       const tempCanvas = renderBoardForGif(moves, { labels: labels });
-      const link = document.createElement("a");
-      link.href = tempCanvas.toDataURL("image/png");
-      link.download = "board.png";
-      link.click();
-    });
+  // --- PNG保存 ---
+document.getElementById("saveBoardPng").addEventListener("click", () => {
+  // ラベルを含めて描画（GIFと同じ描画関数を使用）
+  const tempCanvas = renderBoardForGif(moves, { frameType: "normal" });
+
+  const ctx = tempCanvas.getContext("2d");
+
+  // === ラベル描画（GIFと同じ処理） ===
+  ctx.font = "bold 14px sans-serif";
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+
+  labels.forEach(l => {
+    const cx = marginLeft + l.x * cell;
+    const cy = marginTop + (size - 1 - l.y) * cell;
+
+    // 背景で格子線を消してから描く
+    ctx.fillStyle = "#F9EBCF";
+    ctx.fillRect(cx - cell/2 + 1, cy - cell/2 + 1, cell - 2, cell - 2);
+
+    ctx.fillStyle = "red";
+    ctx.fillText(l.text, cx, cy);
+  });
+
+  // 保存処理
+  const link = document.createElement("a");
+  link.href = tempCanvas.toDataURL("image/png");
+  link.download = "board.png";
+  link.click();
+});
 
 // --- GIF保存 ---
 document.getElementById("saveGifBtn").addEventListener("click", () => {
@@ -399,35 +455,45 @@ function renderBoardForGif(movesSubset, extra = {}) {
   });
 
   // === ラベル描画 ===
-  const finalNumberOnly = document.getElementById("finalNumber").checked; // 数字は最終だけ？
-  const finalAlphaOnly  = document.getElementById("finalAlpha").checked;  // アルファは最終だけ？
+  // === ラベル描画（任意ラベル対応・最終フレーム専用設定対応） ===
+const finalNumberOnly = document.getElementById("finalNumberOnly").checked;
+const finalAlphaOnly  = document.getElementById("finalAlphaOnly").checked;
 
-  ctx.font = "bold 14px sans-serif";
-  ctx.textAlign = "center";
-  ctx.textBaseline = "middle";
+ctx.font = "bold 14px sans-serif";
+ctx.textAlign = "center";
+ctx.textBaseline = "middle";
 
-  labels.forEach(l => {
-    const txt = String(l.text);
-    const isNumber = /^[0-9]+$/.test(txt);
-    const isAlpha  = /^[A-Z]$/.test(txt);
+labels.forEach(l => {
+  const txt = String(l.text).trim();
+  if (!txt) return;
 
-    // 通常フレームでは「finalOnly 指定の種類」は非表示にする
-    if (extra.frameType !== "final") {
-      if (isNumber && finalNumberOnly) return;
-      if (isAlpha  && finalAlphaOnly ) return;
-    }
-    // 最終フレームでは全て表示（finalOnly 指定のものも表示）
+  // --- ラベル種別の判定 ---
+  const isPureNumber = /^[0-9]+$/.test(txt);        // 例: "1", "23"
+  const isPureAlpha  = /^[A-Za-z]$/.test(txt);      // 例: "A", "b"
+  const hasAlpha     = /[A-Za-z]/.test(txt);        // 例: "A1", "b2" も含む
 
-    const cx = marginLeft + l.x * cell;
-    const cy = marginTop + (size - 1 - l.y) * cell;
+  // --- 通常フレームでの非表示制御 ---
+  if (extra.frameType !== "final") {
+    // 「数字のみ」は finalNumberOnly に従う
+    if (isPureNumber && finalNumberOnly) return;
 
-    // 背景で格子を消してから書く
-    ctx.fillStyle = "#F9EBCF";
-    ctx.fillRect(cx - cell/2 + 1, cy - cell/2 + 1, cell - 2, cell - 2);
+    // 「英字または英字を含むもの（例: A, a1）」は finalAlphaOnly に従う
+    if ((isPureAlpha || hasAlpha) && finalAlphaOnly) return;
+  }
 
-    ctx.fillStyle = "red";
-    ctx.fillText(txt, cx, cy);
-  });
+  // --- 座標計算 ---
+  const cx = marginLeft + l.x * cell;
+  const cy = marginTop + (size - 1 - l.y) * cell;
+
+  // --- 背景で線を消してから描画 ---
+  ctx.fillStyle = "#F9EBCF";
+  ctx.fillRect(cx - cell/2 + 1, cy - cell/2 + 1, cell - 2, cell - 2);
+
+  // --- ラベル色 ---
+  ctx.fillStyle = "red";
+  ctx.fillText(txt, cx, cy);
+});
+
 
   // 通常コメント
   drawComments(ctx, canvas.width, canvas.height);
@@ -1027,5 +1093,17 @@ window.addEventListener("DOMContentLoaded", () => {
   const btn = document.getElementById("copySgfBtn");
   if (btn) {
     btn.addEventListener("click", copyBoardToSgf);
+  }
+});
+
+
+// ★ 任意ラベルのON/OFFで他の配置モードを無効化
+document.getElementById("enableCustomLabel").addEventListener("change", e => {
+  const checked = e.target.checked;
+  if (checked) {
+    // チェックがついたら入力欄にフォーカス
+    document.getElementById("labelInputText").focus();
+    placeBlack.checked = false;
+    placeWhite.checked = false;
   }
 });
