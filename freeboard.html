@@ -75,8 +75,8 @@
   <label>最終フレーム静止(秒): <input type="number" id="gifLastDelay" value="2" step="0.1"></label><br><hr>
 
   <label>・下記情報を最終フレームのみ反映</label><br>
-  <label><input type="checkbox" id="finalNumber"> 数字</label><br>
-  <label><input type="checkbox" id="finalAlpha"> アルファベット</label><br><hr>
+  <label><input type="checkbox" id="finalNumberOnly"> 数字</label><br>
+  <label><input type="checkbox" id="finalAlphaOnly"> アルファベット</label><br><hr>
 
   上段コメント(最終フレーム):<br>
   <textarea id="finalCommentTop" rows="2" style="width:95%;"></textarea><br>
@@ -103,9 +103,13 @@
 
     <br>
     <!-- ★ 追加部分 -->
-    <label><input type="checkbox" id="inputNumber"> 数字を入力</label>
-    <label><input type="checkbox" id="inputAlpha"> アルファベットを入力</label>
-    <button id="clearLabels">入力文字削除</button>
+    <div id="labelControls">
+<div id="labelControls">
+  <label><input type="checkbox" id="enableCustomLabel"> 任意ラベル</label>
+  <input type="text" id="labelInputText" placeholder="例: A1" maxlength="3" style="width:60px;">
+  <button id="clearLabels">ラベル全消去</button>
+</div>
+
     <br><button id="generateLinkBtn">リンク生成＆コピー</button>
     <br>
     <input type="text" id="generatedLink" readonly style="width:60%;">
@@ -117,8 +121,8 @@
   <button id="undoBtn">一手戻す</button>
   <button id="redoBtn">一手進める</button>
   <button id="redoAllBtn">全て進める</button>
-    <button id="copySgfBtn">SGFコピー</button>
-<div id="currentKifu"></div>
+  <button id="copySgfBtn">SGFコピー</button>
+
 </div>
 <div id="freeModeControls" style="display:none; margin-top:5px;">
   <label><input type="checkbox" id="placeBlack"> 黒石配置モード</label>
@@ -142,12 +146,8 @@
   </div>
 
   <script src="https://cdn.jsdelivr.net/npm/gif.js.optimized/dist/gif.js"></script>
-   <script src="renjuboard.js"></script>
- 
+  <script src="renjuboard.js"></script>
 
  
 </body>
 </html>
-
-
-
