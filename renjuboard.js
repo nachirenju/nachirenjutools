@@ -913,3 +913,44 @@ document.getElementById("copySgfBtn").addEventListener("click", () => {
   copySgfFromGame(); // tournamentanalysis.js 側の関数を呼び出す
 });
 
+// --- 棋譜入力欄の反映処理 ---
+const kifuInput = document.getElementById("kifuInput");
+
+if (kifuInput) {
+  kifuInput.addEventListener("change", () => {
+    const input = kifuInput.value.trim();
+    if (!input) return;
+
+    // 正規化（空白やカンマを削除）
+    const normalized = input.replace(/[^a-o0-9]/gi, "").toLowerCase();
+
+    // 例: h8i9h10 → ["h8","i9","h10"]
+    const tokens = normalized.match(/[a-o][0-9]{1,2}/g);
+    if (!tokens) {
+      alert("棋譜を読み取れません。例: h8i9h10 のように入力してください。");
+      return;
+    }
+
+    // --- 盤面リセット ---
+    moves = [];
+    boardState = Array.from({ length: size }, () => Array(size).fill(null));
+    blackTurn = true;
+    redoStack = [];
+
+    // --- 石を順番に配置 ---
+    tokens.forEach((move, i) => {
+      const col = move[0].charCodeAt(0) - "a".charCodeAt(0);
+      const row = parseInt(move.slice(1), 10) - 1;  // 1始まり→0基準
+      if (col < 0 || col >= size || row < 0 || row >= size) return;
+
+      const color = (i % 2 === 0) ? "black" : "white";
+      const num = i + 1;
+      moves.push({ x: col, y: row, color, number: num });
+      boardState[row][col] = color;
+    });
+
+    renderBoard();
+  });
+}
+
+
