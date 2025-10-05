@@ -349,28 +349,34 @@ function renderBoardForGif(movesSubset, extra = {}) {
   ctx.fillStyle = "#F9EBCF";
   ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-  // 盤
+  // 盤（★ 修正：線の範囲を 0〜size-1 に）
   ctx.strokeStyle = "black";
   ctx.lineWidth = 1;
-  for (let i = 1; i < size - 1; i++) {
+  for (let i = 0; i < size; i++) {
     const x = marginLeft + i * cell + 0.5;
     ctx.beginPath();
     ctx.moveTo(x, marginTop);
     ctx.lineTo(x, marginTop + innerSize);
     ctx.stroke();
   }
-  for (let i = 1; i < size - 1; i++) {
+  for (let i = 0; i < size; i++) {
     const y = marginTop + i * cell + 0.5;
     ctx.beginPath();
     ctx.moveTo(marginLeft, y);
     ctx.lineTo(marginLeft + innerSize, y);
     ctx.stroke();
   }
+
+  // 外枠
   ctx.lineWidth = 2;
   ctx.strokeRect(marginLeft + 0.5, marginTop + 0.5, innerSize, innerSize);
 
-  drawCoordinates(ctx, canvas.width, canvas.height, innerSize);
+  // ★ 星を格子線のあとに描画（順序を変更）
   drawStars(ctx);
+
+  // 座標
+  drawCoordinates(ctx, canvas.width, canvas.height, innerSize);
+
 
   // 石
   movesSubset.forEach(m => {
@@ -952,5 +958,3 @@ if (kifuInput) {
     renderBoard();
   });
 }
-
-
