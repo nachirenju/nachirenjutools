@@ -59,42 +59,49 @@ window.addEventListener("DOMContentLoaded", () => {
 
 
 // ファイル読み込み
-document.getElementById("fileInput").addEventListener("change", function(e){
-  const file = e.target.files[0];
-  if(!file) return;
-  const reader = new FileReader();
-  reader.onload = function(event){
-    const text = event.target.result;
-    const parser = new DOMParser();
-    const xmlDoc = parser.parseFromString(text, "text/xml");
+const fileInput = document.getElementById("fileInput");
+if (fileInput) {
+  fileInput.addEventListener("change", function(e) {
+    const file = e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = function(event) {
+      const text = event.target.result;
+      const parser = new DOMParser();
+      const xmlDoc = parser.parseFromString(text, "text/xml");
 
-    // プレイヤー情報の格納部分
-// プレイヤー情報の格納部分
-allPlayers = {};
-playerIndex = {};
-const players = xmlDoc.getElementsByTagName("player");
+      // プレイヤー情報の格納部分
+      allPlayers = {};
+      playerIndex = {};
+      const players = xmlDoc.getElementsByTagName("player");
 
-Array.from(players).forEach(p=>{
-  const id = p.getAttribute("id");
-  const name = (p.getAttribute("name") || "").trim();
-  const surname = (p.getAttribute("surname") || "").trim();
-  const native_name = (p.getAttribute("native_name") || "").trim();
+      Array.from(players).forEach(p => {
+        const id = p.getAttribute("id");
+        const name = (p.getAttribute("name") || "").trim();
+        const surname = (p.getAttribute("surname") || "").trim();
+        const native_name = (p.getAttribute("native_name") || "").trim();
 
-  allPlayers[id] = {id,name,surname,native_name};
+        allPlayers[id] = { id, name, surname, native_name };
 
-  // 検索用キーを準備
-  const lowerName = name.toLowerCase();
-  const lowerSurname = surname.toLowerCase();
-  const lowerNative = native_name.toLowerCase();
-  const fullName = (surname && name) ? (surname + " " + name).toLowerCase() : "";
+        // 検索用キーを準備
+        const lowerName = name.toLowerCase();
+        const lowerSurname = surname.toLowerCase();
+        const lowerNative = native_name.toLowerCase();
+        const fullName =
+          surname && name ? (surname + " " + name).toLowerCase() : "";
 
-  [lowerName, lowerSurname, lowerNative, fullName].forEach(key=>{
-    if(key){
-      if(!playerIndex[key]) playerIndex[key] = [];
-      playerIndex[key].push(id);
-    }
+        [lowerName, lowerSurname, lowerNative, fullName].forEach(key => {
+          if (key) {
+            if (!playerIndex[key]) playerIndex[key] = [];
+            playerIndex[key].push(id);
+          }
+        });
+      });
+    };
+    reader.readAsText(file);
   });
-});
+}
+
 
 
   // 大会情報の格納部分
