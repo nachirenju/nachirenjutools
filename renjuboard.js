@@ -908,15 +908,16 @@ labelsSubset.forEach(l => {
   return canvas;
 }
 
+// SGFコピー処理
 document.getElementById("copySgfBtn").addEventListener("click", () => {
-  // renjuboard.js 内で使用している棋譜配列を currentMoves にセットしておく
+  // currentMoves に代入してから length を使う
   window.currentMoves = moves.map(m => {
-    const letter = String.fromCharCode("a".charCodeAt(0) + m.x - 1);
-    return letter + m.y; // 例: h8, i9 のような形式
+    const letter = String.fromCharCode("a".charCodeAt(0) + m.x);
+    return letter + (m.y + 1); // 1始まり補正
   });
-  window.currentIndex = currentMoves.length;
+  window.currentIndex = window.currentMoves.length;
 
-  copySgfFromGame(); // tournamentanalysis.js 側の関数を呼び出す
+  copySgfFromGame(); // SGF生成＆コピー
 });
 
 // --- 棋譜入力欄の反映処理 ---
@@ -958,3 +959,73 @@ if (kifuInput) {
     renderBoard();
   });
 }
+
+// === SGFコピー関連 ===
+function moveToSgf(move, size = 15) {
+  const colLetter = move[0];
+  const rowNumber = parseInt(move.slice(1), 10);
+  const colIndex = colLetter.charCodeAt(0) - "a".charCodeAt(0);
+  const rowIndex = size - rowNumber;
+  const sgfCol = String.fromCharCode("a".charCodeAt(0) + colIndex);
+  const sgfRow = String.fromCharCode("a".charCodeAt(0) + rowIndex);
+  return sgfCol + sgfRow;
+}
+
+function convertMovesToSgfFromBoard(moves, size = 15) {
+  if (!moves || moves.length === 0) return "(;GM[1]SZ[15])";
+
+  let sgfMoves = "";
+  const letters = "abcdefghijklmno";
+
+  moves.forEach((m, i) => {
+    const color = (i % 2 === 0) ? "B" : "W";
+    const moveStr = letters[m.x] + (m.y + 1);
+    sgfMoves += `;${color}[${moveToSgf(moveStr, size)}]`;
+  });
+
+  return `(;GM[1]SZ[${size}]\n${sgfMoves})`;
+}
+
+function copyBoardToSgf() {
+  if (!moves || moves.length === 0) {
+    alert("盤面に石がありません。");
+    return;
+  }
+
+  const sgf = convertMovesToSgfFromBoard(moves);
+  navigator.clipboard.writeText(sgf)
+    .then(() => {
+      showCopyMessage("SGF形式でクリップボードにコピーしました。");
+    })
+    .catch(err => {
+      console.error("コピーに失敗:", err);
+      alert("コピーに失敗しました。");
+    });
+}
+
+// ★ メッセージを一時表示（既存のものがあれば再利用）
+function showCopyMessage(message) {
+  let msg = document.getElementById("copyMessage");
+  if (!msg) {
+    msg = document.createElement("div");
+    msg.id = "copyMessage";
+    msg.style.color = "green";
+    msg.style.fontSize = "0.9em";
+    msg.style.marginTop = "4px";
+    document.body.appendChild(msg);
+  }
+  msg.textContent = message;
+  msg.style.display = "block";
+  clearTimeout(msg._timeoutId);
+  msg._timeoutId = setTimeout(() => {
+    msg.style.display = "none";
+  }, 1500);
+}
+
+// ★ ボタンに紐付け
+window.addEventListener("DOMContentLoaded", () => {
+  const btn = document.getElementById("copySgfBtn");
+  if (btn) {
+    btn.addEventListener("click", copyBoardToSgf);
+  }
+});
