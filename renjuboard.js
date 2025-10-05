@@ -800,7 +800,6 @@ function updateCropPreview() {
   const showOuterFrame   = document.getElementById("showOuterFrame").checked;
   const showExtraMargin  = document.getElementById("showExtraMargin").checked;
   const showCoordinates  = document.getElementById("showCoordinates").checked;
- 
 
   // 石とラベルの範囲を探索
   let xs = [], ys = [];
@@ -836,7 +835,7 @@ function updateCropPreview() {
   content.innerHTML = "";
   content.appendChild(croppedCanvas);
 
-  // 保存
+  // --- 保存ボタン ---
   document.getElementById("downloadCropPngBtn").onclick = () => {
     const link = document.createElement("a");
     link.href = croppedCanvas.toDataURL("image/png");
@@ -844,6 +843,67 @@ function updateCropPreview() {
     link.click();
   };
 }
+ // --- ★ クリップボードにコピー機能 ---
+const copyBtn = document.getElementById("copyCropPngBtn");
+if (copyBtn) {
+  copyBtn.onclick = async () => {
+    try {
+      // ✅ croppedCanvas の代わりにプレビュー領域の canvas を取得
+      const previewCanvas = document.querySelector("#pngPreviewContent canvas");
+      if (!previewCanvas) {
+        showToast("プレビュー画像が見つかりません。", true);
+        return;
+      }
+
+      previewCanvas.toBlob(async blob => {
+        await navigator.clipboard.write([
+          new ClipboardItem({ "image/png": blob })
+        ]);
+        showToast("プレビュー画像をクリップボードにコピーしました！");
+      }, "image/png");
+    } catch (err) {
+      console.error("クリップボードコピーに失敗:", err);
+      showToast("クリップボードへのコピーに失敗しました。", true);
+    }
+  };
+}
+
+
+// === ★ HTMLを変更せずに使えるトースト関数 ===
+function showToast(message, isError = false) {
+  // 既存のトーストがあれば再利用、なければ生成
+  let toast = document.getElementById("copyToast");
+  if (!toast) {
+    toast = document.createElement("div");
+    toast.id = "copyToast";
+    toast.style.position = "fixed";
+    toast.style.bottom = "20px";
+    toast.style.right = "20px";
+    toast.style.background = "rgba(0,0,0,0.75)";
+    toast.style.color = "white";
+    toast.style.padding = "10px 16px";
+    toast.style.borderRadius = "6px";
+    toast.style.fontSize = "14px";
+    toast.style.zIndex = "9999";
+    toast.style.opacity = "0";
+    toast.style.transition = "opacity 0.4s";
+    document.body.appendChild(toast);
+  }
+
+  // 表示設定
+  toast.textContent = message;
+  toast.style.background = isError ? "rgba(200,0,0,0.8)" : "rgba(0,0,0,0.75)";
+  toast.style.opacity = "1";
+  toast.style.display = "block";
+
+  // フェードアウト
+  clearTimeout(toast._timeoutId);
+  toast._timeoutId = setTimeout(() => {
+    toast.style.opacity = "0";
+    setTimeout(() => (toast.style.display = "none"), 500);
+  }, 1500);
+}
+
 
 
 // --- チェックボックスや数値入力の変更で即更新 ---
