@@ -21,6 +21,18 @@
   z-index: 1000;
   box-shadow: 0 0 10px rgba(0,0,0,0.3);
 }
+.color-swatch {
+  width: 24px;
+  height: 24px;
+  border-radius: 4px;
+  cursor: pointer;
+  border: 2px solid transparent;
+  box-sizing: border-box;
+}
+.color-swatch.selected {
+  border-color: #333;
+  box-shadow: 0 0 3px rgba(0,0,0,0.5);
+}
 
   </style>
 </head>
@@ -107,9 +119,26 @@
     <div id="labelControls">
 <div id="labelControls">
   <label><input type="checkbox" id="enableCustomLabel"> 任意ラベル</label>
-  <input type="text" id="labelInputText" placeholder="例: A1" maxlength="3" style="width:60px;">
-  <button id="clearLabels">ラベル全消去</button>
+<label>
+  ラベル色: 
+  <input type="color" id="labelColorPicker" value="#ff0000">
+</label>
+
+<!-- ★ ここにラッパーを追加 -->
+<div id="colorPalette" style="display:flex; gap:6px; align-items:center; flex-wrap:wrap; margin-top:6px;">
+  <div class="color-swatch" data-color="#ff0000" style="background:#ff0000;"></div>
+  <div class="color-swatch" data-color="#00a2ff" style="background:#00a2ff;"></div>
+  <div class="color-swatch" data-color="#00c853" style="background:#00c853;"></div>
+  <div class="color-swatch" data-color="#ffeb3b" style="background:#ffeb3b;"></div>
+  <div class="color-swatch" data-color="#ff9800" style="background:#ff9800;"></div>
+  <div class="color-swatch" data-color="#9c27b0" style="background:#9c27b0;"></div>
+  <div class="color-swatch" data-color="#795548" style="background:#795548;"></div>
+  <div class="color-swatch" data-color="#000000" style="background:#000000;"></div>
+  <div class="color-swatch" data-color="#ffffff" style="background:#ffffff; border:1px solid #ccc;"></div>
 </div>
+
+<input type="text" id="labelInputText" placeholder="例: A1" maxlength="3" style="width:60px;">
+<button id="clearLabels">ラベル全消去</button>
 
     <br><button id="generateLinkBtn">リンク生成＆コピー</button>
     <br>
