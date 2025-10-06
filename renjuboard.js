@@ -142,16 +142,18 @@
       ctx.font = "bold 14px sans-serif";
       ctx.textAlign = "center";
       ctx.textBaseline = "middle";
-      labels.forEach(l => {
-        const cx = marginLeft + l.x * cell;
-        const cy = marginTop + (size - 1 - l.y) * cell;
+labels.forEach(l => {
+  const cx = marginLeft + l.x * cell;
+  const cy = marginTop + (size - 1 - l.y) * cell;
 
-        ctx.fillStyle = "#F9EBCF";
-        ctx.fillRect(cx - cell/2 + 1, cy - cell/2 + 1, cell - 2, cell - 2);
+  // 背景で格子線を消す
+  ctx.fillStyle = "#F9EBCF";
+  ctx.fillRect(cx - cell / 2 + 1, cy - cell / 2 + 1, cell - 2, cell - 2);
 
-        ctx.fillStyle = "red";
-        ctx.fillText(l.text, cx, cy);
-      });
+  // ★ 個別カラー対応（なければ赤をデフォルトに）
+  ctx.fillStyle = l.color || "red";
+  ctx.fillText(l.text, cx, cy);
+});
 
       drawComments(ctx, canvas.width, canvas.height);
 
@@ -183,51 +185,58 @@ function handleClick(e, button) {
 
   if (x < 0 || y < 0 || x >= size || y >= size) return;
 
-  // ★ 任意ラベル入力モード
-  const labelMode = document.getElementById("enableCustomLabel").checked;
-  if (labelMode) {
-    const inputEl = document.getElementById("labelInputText");
-    const text = inputEl.value.trim().slice(0, 3);
-    if (text) {
-      // === ラベルを追加または上書き ===
-      const existing = labels.find(l => l.x === x && l.y === y);
-      if (existing) {
-        existing.text = text;
-      } else {
-        labels.push({ x, y, text });
-      }
-      renderBoard();
+// ★ 任意ラベル入力モード
+const labelMode = document.getElementById("enableCustomLabel").checked;
+if (labelMode) {
+  const inputEl = document.getElementById("labelInputText");
+  const text = inputEl.value.trim().slice(0, 3);
+  const colorPicker = document.getElementById("labelColorPicker");
+  const selectedColor = colorPicker ? colorPicker.value : "red"; // デフォルト赤
 
-      // === 入力内容に応じて次の値を自動更新 ===
-      // [1] アルファベット一文字（大文字 or 小文字）
-      if (/^[A-Za-z]$/.test(text)) {
-        const code = text.charCodeAt(0);
-        let next = text;
-        if (text >= "A" && text <= "Z") {
-          next = (code < 90) ? String.fromCharCode(code + 1) : "A";
-        } else if (text >= "a" && text <= "z") {
-          next = (code < 122) ? String.fromCharCode(code + 1) : "a";
-        }
-        inputEl.value = next;
-      }
-      // [2] 数字のみ
-      else if (/^[0-9]+$/.test(text)) {
-        inputEl.value = String(parseInt(text, 10) + 1);
-      }
-      // [3] アルファベット＋数字（例: a1, B3）
-      else if (/^([A-Za-z])([0-9]+)$/.test(text)) {
-        const match = text.match(/^([A-Za-z])([0-9]+)$/);
-        const alpha = match[1];
-        const num = parseInt(match[2], 10) + 1;
-        inputEl.value = alpha + num;
-      }
-      // [4] その他（記号など）はそのまま
-      else {
-        inputEl.value = text;
-      }
+  if (text) {
+    // === ラベルを追加または上書き ===
+    const existing = labels.find(l => l.x === x && l.y === y);
+    if (existing) {
+      // 既存ラベルがあれば色は維持して文字のみ更新
+      existing.text = text;
+    } else {
+      // 新規ラベルは現在の選択色を採用
+      labels.push({ x, y, text, color: selectedColor });
     }
-    return;
+
+    renderBoard();
+
+    // === 入力内容に応じて次の値を自動更新 ===
+    // [1] アルファベット一文字（大文字 or 小文字）
+    if (/^[A-Za-z]$/.test(text)) {
+      const code = text.charCodeAt(0);
+      let next = text;
+      if (text >= "A" && text <= "Z") {
+        next = (code < 90) ? String.fromCharCode(code + 1) : "A";
+      } else if (text >= "a" && text <= "z") {
+        next = (code < 122) ? String.fromCharCode(code + 1) : "a";
+      }
+      inputEl.value = next;
+    }
+    // [2] 数字のみ
+    else if (/^[0-9]+$/.test(text)) {
+      inputEl.value = String(parseInt(text, 10) + 1);
+    }
+    // [3] アルファベット＋数字（例: a1, B3）
+    else if (/^([A-Za-z])([0-9]+)$/.test(text)) {
+      const match = text.match(/^([A-Za-z])([0-9]+)$/);
+      const alpha = match[1];
+      const num = parseInt(match[2], 10) + 1;
+      inputEl.value = alpha + num;
+    }
+    // [4] その他（記号など）はそのまま
+    else {
+      inputEl.value = text;
+    }
   }
+  return;
+}
+
 
   // --- 自由配置モード ---
   if (freeMode) {
@@ -322,17 +331,19 @@ document.getElementById("saveBoardPng").addEventListener("click", () => {
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
 
-  labels.forEach(l => {
-    const cx = marginLeft + l.x * cell;
-    const cy = marginTop + (size - 1 - l.y) * cell;
+labels.forEach(l => {
+  const cx = marginLeft + l.x * cell;
+  const cy = marginTop + (size - 1 - l.y) * cell;
 
-    // 背景で格子線を消してから描く
-    ctx.fillStyle = "#F9EBCF";
-    ctx.fillRect(cx - cell/2 + 1, cy - cell/2 + 1, cell - 2, cell - 2);
+  // 背景で格子線を消す
+  ctx.fillStyle = "#F9EBCF";
+  ctx.fillRect(cx - cell / 2 + 1, cy - cell / 2 + 1, cell - 2, cell - 2);
 
-    ctx.fillStyle = "red";
-    ctx.fillText(l.text, cx, cy);
-  });
+  // ★ 個別カラー対応（なければ赤をデフォルトに）
+  ctx.fillStyle = l.color || "red";
+  ctx.fillText(l.text, cx, cy);
+});
+
 
   // 保存処理
   const link = document.createElement("a");
@@ -490,7 +501,7 @@ labels.forEach(l => {
   ctx.fillRect(cx - cell/2 + 1, cy - cell/2 + 1, cell - 2, cell - 2);
 
   // --- ラベル色 ---
-  ctx.fillStyle = "red";
+  ctx.fillStyle = l.color || "red";
   ctx.fillText(txt, cx, cy);
 });
 
@@ -1007,7 +1018,7 @@ labelsSubset.forEach(l => {
   ctx.fillStyle = "#F9EBCF";
   ctx.fillRect(cx - cell/2 + 1, cy - cell/2 + 1, cell - 2, cell - 2);
 
-  ctx.fillStyle = "red";
+  ctx.fillStyle = l.color || "red";
   ctx.fillText(l.text, cx, cy);
 });
 
@@ -1050,7 +1061,7 @@ document.getElementById("copySgfBtn").addEventListener("click", () => {
 const kifuInput = document.getElementById("kifuInput");
 
 if (kifuInput) {
-  kifuInput.addEventListener("change", () => {
+  kifuInput.addEventListener("input", () => {
     const input = kifuInput.value.trim();
     if (!input) return;
 
@@ -1166,4 +1177,18 @@ document.getElementById("enableCustomLabel").addEventListener("change", e => {
     placeBlack.checked = false;
     placeWhite.checked = false;
   }
+});
+
+// --- カラーパレット機能 ---
+document.querySelectorAll(".color-swatch").forEach(swatch => {
+  swatch.addEventListener("click", () => {
+    const color = swatch.getAttribute("data-color");
+
+    // hidden input に保存（既存処理がこの値を参照）
+    document.getElementById("labelColorPicker").value = color;
+
+    // 見た目を更新
+    document.querySelectorAll(".color-swatch").forEach(s => s.classList.remove("selected"));
+    swatch.classList.add("selected");
+  });
 });
